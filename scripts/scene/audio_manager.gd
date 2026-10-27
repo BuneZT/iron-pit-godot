@@ -18,7 +18,7 @@ const MUSIC_FILE: Dictionary = {
 	"base_volume": 0.80,
 }
 
-var settings: AudioSettings
+var settings: GameSettings
 var _pools: Dictionary = {}
 var _pool_indices: Dictionary = {}
 var _music_player: AudioStreamPlayer
@@ -26,9 +26,9 @@ var _is_music_ducked: bool = false
 var _music_wanted: bool = false
 
 
-func _init(initial_settings: AudioSettings = null) -> void:
+func _init(initial_settings: GameSettings = null) -> void:
 	name = "AudioManager"
-	settings = initial_settings if initial_settings != null else AudioSettings.new()
+	settings = initial_settings if initial_settings != null else GameSettings.new()
 
 
 static func _linear_to_db_safe(linear: float) -> float:
