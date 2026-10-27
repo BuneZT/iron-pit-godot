@@ -62,7 +62,9 @@ func _init_atmosphere() -> void:
 	directional_light.light_color = Color(0.75, 0.76, 0.78)
 	directional_light.light_energy = 0.45
 	directional_light.shadow_enabled = true
-	directional_light.shadow_blur = 1.5
+	directional_light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	directional_light.directional_shadow_max_distance = 50.0
+	directional_light.shadow_blur = 1.2
 	add_child(directional_light)
 
 

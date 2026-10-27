@@ -43,6 +43,10 @@ var contact_damage: float = 15.0
 
 var on_enemy_groan: Callable
 var _iron_texture: Texture2D
+var _box_mesh_cache: Dictionary = {}
+var _box_shape_cache: Dictionary = {}
+var _cyl_mesh_cache: Dictionary = {}
+var _cyl_shape_cache: Dictionary = {}
 
 
 func _init(parent_scene: Node3D = null, spawn_source: Variant = null) -> void:
@@ -116,6 +120,16 @@ func spawn_enemy(wave_number: int = 1, player_pos: Variant = null) -> EnemyInsta
 	root.linear_damp = 0.8
 	root.can_sleep = false
 	root.position = spawn_pt
+	root.set_meta("enemy_id", id)
+
+	var hitbox_area := Area3D.new()
+	hitbox_area.name = "HitboxCompoundArea"
+	hitbox_area.collision_layer = 8
+	hitbox_area.collision_mask = 0
+	hitbox_area.monitoring = false
+	hitbox_area.monitorable = false
+	hitbox_area.set_meta("enemy_id", id)
+	root.add_child(hitbox_area)
 
 	var root_col := CollisionShape3D.new()
 	root_col.name = "RootCapsuleCollider"
@@ -454,6 +468,56 @@ func spawn_enemy(wave_number: int = 1, player_pos: Variant = null) -> EnemyInsta
 	return instance
 
 
+func _get_box_mesh(size: Vector3) -> BoxMesh:
+	var key := "%.3f_%.3f_%.3f" % [size.x, size.y, size.z]
+	if not _box_mesh_cache.has(key):
+		var box := BoxMesh.new()
+		box.size = size
+		_box_mesh_cache[key] = box
+	return _box_mesh_cache[key]
+
+
+func _get_box_shape(size: Vector3) -> BoxShape3D:
+	var key := "%.3f_%.3f_%.3f" % [size.x, size.y, size.z]
+	if not _box_shape_cache.has(key):
+		var shape := BoxShape3D.new()
+		shape.size = size
+		_box_shape_cache[key] = shape
+	return _box_shape_cache[key]
+
+
+func _get_cyl_mesh(d_top: float, d_bot: float, h: float, segs: int) -> CylinderMesh:
+	var key := "%.3f_%.3f_%.3f_%d" % [d_top, d_bot, h, segs]
+	if not _cyl_mesh_cache.has(key):
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = d_top / 2.0
+		cyl.bottom_radius = d_bot / 2.0
+		cyl.height = h
+		cyl.radial_segments = maxi(4, segs)
+		cyl.rings = 1
+		_cyl_mesh_cache[key] = cyl
+	return _cyl_mesh_cache[key]
+
+
+func _get_cyl_shape(d_top: float, d_bot: float, h: float) -> CylinderShape3D:
+	var key := "%.3f_%.3f_%.3f" % [d_top, d_bot, h]
+	if not _cyl_shape_cache.has(key):
+		var shape := CylinderShape3D.new()
+		shape.height = h
+		shape.radius = maxf(d_top, d_bot) / 2.0
+		_cyl_shape_cache[key] = shape
+	return _cyl_shape_cache[key]
+
+
+func _compute_transform_relative_to_root(node: Node3D, root_node: Node3D) -> Transform3D:
+	var xform := node.transform
+	var p := node.get_parent()
+	while p is Node3D and p != root_node:
+		xform = (p as Node3D).transform * xform
+		p = p.get_parent()
+	return xform
+
+
 func _add_box_part(
 	part_name: String,
 	size: Vector3,
@@ -466,30 +530,22 @@ func _add_box_part(
 ) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.name = part_name
-	var box := BoxMesh.new()
-	box.size = size
-	mi.mesh = box
+	mi.mesh = _get_box_mesh(size)
 	mi.material_override = mat
 	mi.position = pos
 	mi.rotation = rot
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if cast_shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.set_meta("enemy_id", enemy_id)
-
-	var hit_area := Area3D.new()
-	hit_area.name = "HitboxArea"
-	hit_area.collision_layer = 8
-	hit_area.collision_mask = 0
-	hit_area.monitoring = false
-	hit_area.monitorable = false
-	hit_area.set_meta("enemy_id", enemy_id)
-	var col := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = size
-	col.shape = shape
-	hit_area.add_child(col)
-	mi.add_child(hit_area)
-
 	parent.add_child(mi)
+
+	var root_node := parent if parent is RigidBody3D else parent.get_parent() as Node3D
+	var hit_area := root_node.get_node_or_null("HitboxCompoundArea") as Area3D
+	if hit_area != null:
+		var col := CollisionShape3D.new()
+		col.shape = _get_box_shape(size)
+		col.transform = _compute_transform_relative_to_root(mi, root_node)
+		hit_area.add_child(col)
+
 	return mi
 
 
@@ -508,35 +564,22 @@ func _add_cylinder_part(
 ) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.name = part_name
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = d_top / 2.0
-	cyl.bottom_radius = d_bot / 2.0
-	cyl.height = h
-	cyl.radial_segments = maxi(4, segs)
-	cyl.rings = 1
-	mi.mesh = cyl
+	mi.mesh = _get_cyl_mesh(d_top, d_bot, h, segs)
 	mi.material_override = mat
 	mi.position = pos
 	mi.rotation = rot
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if cast_shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.set_meta("enemy_id", enemy_id)
-
-	var hit_area := Area3D.new()
-	hit_area.name = "HitboxArea"
-	hit_area.collision_layer = 8
-	hit_area.collision_mask = 0
-	hit_area.monitoring = false
-	hit_area.monitorable = false
-	hit_area.set_meta("enemy_id", enemy_id)
-	var col := CollisionShape3D.new()
-	var shape := CylinderShape3D.new()
-	shape.height = h
-	shape.radius = maxf(d_top, d_bot) / 2.0
-	col.shape = shape
-	hit_area.add_child(col)
-	mi.add_child(hit_area)
-
 	parent.add_child(mi)
+
+	var root_node := parent if parent is RigidBody3D else parent.get_parent() as Node3D
+	var hit_area := root_node.get_node_or_null("HitboxCompoundArea") as Area3D
+	if hit_area != null:
+		var col := CollisionShape3D.new()
+		col.shape = _get_cyl_shape(d_top, d_bot, h)
+		col.transform = _compute_transform_relative_to_root(mi, root_node)
+		hit_area.add_child(col)
+
 	return mi
 
 

@@ -94,7 +94,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				pause_game()
 
 
-func _physics_process(raw_dt: float) -> void:
+func _process(raw_dt: float) -> void:
 	var dt := minf(raw_dt, 0.1)
 	total_time += dt
 	update_braziers(total_time, wave_manager.current_wave)

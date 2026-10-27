@@ -734,29 +734,42 @@ func update_hud(snapshot: Dictionary) -> void:
 	var is_reloading: bool = bool(snapshot.get("is_reloading", false))
 	var status: String = String(snapshot.get("status", "MENU"))
 
-	wave_value.text = str(wave)
-	if is_in_breather:
-		enemies_label.text = "Status"
-		enemies_value.text = "PURGED"
-	else:
-		enemies_label.text = "Hostiles"
-		enemies_value.text = str(remaining_enemies)
+	var wave_str := str(wave)
+	if wave_value.text != wave_str:
+		wave_value.text = wave_str
 
-	kills_value.text = str(kills)
+	var target_enemies_label := "Status" if is_in_breather else "Hostiles"
+	var target_enemies_value := "PURGED" if is_in_breather else str(remaining_enemies)
+	if enemies_label.text != target_enemies_label:
+		enemies_label.text = target_enemies_label
+	if enemies_value.text != target_enemies_value:
+		enemies_value.text = target_enemies_value
+
+	var kills_str := str(kills)
+	if kills_value.text != kills_str:
+		kills_value.text = kills_str
 
 	var hp_pct := clampf((hp / max_hp) * 100.0, 0.0, 100.0)
-	health_text.text = "%d / %d" % [int(round(hp)), int(round(max_hp))]
-	health_bar_fill.anchor_right = hp_pct / 100.0
+	var hp_str := "%d / %d" % [int(round(hp)), int(round(max_hp))]
+	if health_text.text != hp_str:
+		health_text.text = hp_str
+	var target_anchor := hp_pct / 100.0
+	if absf(health_bar_fill.anchor_right - target_anchor) > 0.001:
+		health_bar_fill.anchor_right = target_anchor
 
-	ammo_value.text = str(ammo)
+	var ammo_str := str(ammo)
+	if ammo_value.text != ammo_str:
+		ammo_value.text = ammo_str
+
+	var target_hint := "READY"
 	if is_reloading:
-		reload_hint.text = "RELOADING..."
+		target_hint = "RELOADING..."
 	elif ammo == 0:
-		reload_hint.text = "PRESS [R] TO RELOAD"
+		target_hint = "PRESS [R] TO RELOAD"
 	elif ammo <= 3:
-		reload_hint.text = "LOW AMMO [R]"
-	else:
-		reload_hint.text = "READY"
+		target_hint = "LOW AMMO [R]"
+	if reload_hint.text != target_hint:
+		reload_hint.text = target_hint
 
 	if wave_whisper != null:
 		if is_in_breather:

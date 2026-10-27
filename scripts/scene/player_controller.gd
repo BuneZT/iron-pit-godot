@@ -68,6 +68,7 @@ func _input(event: InputEvent) -> void:
 func apply_mouse_delta(delta_x: float, delta_y: float) -> void:
 	yaw -= delta_x * mouse_sensitivity
 	pitch = clampf(pitch + delta_y * mouse_sensitivity, -max_pitch, max_pitch)
+	_sync_camera_transform()
 
 
 static func _keycode_to_code(keycode: Key) -> String:
