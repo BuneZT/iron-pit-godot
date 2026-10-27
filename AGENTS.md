@@ -20,8 +20,7 @@ This document defines the architecture, visual art direction, technical standard
 iron-pit-godot/
 ├── project.godot                 # Engine configuration (Forward+, Jolt Physics 3D, gravity -18.0, layers)
 ├── default_bus_layout.tres       # Audio Bus Layout (Master, Music, SFX)
-├── AGENT.md                      # Godot 4.7 Best Practices Guide for AI Agents
-├── AGENTS.md                     # Synced copy of AGENT.md for multi-agent compatibility
+├── AGENTS.md                     # Godot 4.7 Best Practices Guide for AI Agents
 ├── assets/
 │   ├── audio/                    # Preloaded real CC0 .ogg/.wav sound effects (NO AudioStreamGenerator synthesis)
 │   └── textures/                 # Pre-generated 128x128 Bayer-dithered retro PNG textures
