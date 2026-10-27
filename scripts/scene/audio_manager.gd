@@ -142,6 +142,18 @@ func play_distance_attenuated(
 	play(effect, factor)
 
 
+func stop_all() -> void:
+	_music_wanted = false
+	if _music_player != null:
+		_music_player.stop()
+	for key in _pools.keys():
+		var pool: Array = _pools[key]
+		for p in pool:
+			var player := p as AudioStreamPlayer
+			if player != null:
+				player.stop()
+
+
 func apply_settings() -> void:
 	if _music_player != null:
 		_music_player.volume_db = _linear_to_db_safe(_get_calculated_music_volume())

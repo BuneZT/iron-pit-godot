@@ -13,6 +13,8 @@ func before_each() -> void:
 
 func after_each() -> void:
 	if is_instance_valid(_app):
+		if _app.audio != null:
+			_app.audio.stop_all()
 		_app.get_parent().remove_child(_app)
 		_app.free()
 

@@ -6,6 +6,7 @@ var on_master_volume_change: Callable
 var on_music_volume_change: Callable
 var on_sfx_volume_change: Callable
 var on_toggle_mute: Callable
+var on_render_scale_change: Callable
 
 var wave_value: Label
 var enemies_label: Label
@@ -24,12 +25,18 @@ var modal_overlay: Control
 var modal_title: Label
 var modal_subtitle: Label
 var action_button: Button
+var settings_button: Button
 var chronicle_button: Button
 var chronicle_modal: Control
 var chronicle_close_button: Button
+var settings_modal: Control
+var settings_close_button: Button
+var settings_back_button: Button
 var wave_whisper: Control
 var wave_whisper_label: Label
 
+var render_scale_slider: HSlider
+var render_scale_value: Label
 var master_vol_slider: HSlider
 var master_vol_value: Label
 var music_vol_slider: HSlider
@@ -57,6 +64,8 @@ func _init(action_cb: Callable = Callable(), audio_callbacks: Dictionary = {}) -
 		on_sfx_volume_change = audio_callbacks["on_sfx_volume_change"]
 	if audio_callbacks.has("on_toggle_mute"):
 		on_toggle_mute = audio_callbacks["on_toggle_mute"]
+	if audio_callbacks.has("on_render_scale_change"):
+		on_render_scale_change = audio_callbacks["on_render_scale_change"]
 
 	_build_ui()
 
@@ -387,6 +396,7 @@ func _build_ui() -> void:
 	center_box.add_child(modal_card)
 
 	var card_vbox := VBoxContainer.new()
+	card_vbox.name = "cardVBox"
 	card_vbox.add_theme_constant_override("separation", 14)
 	modal_card.add_child(card_vbox)
 
@@ -437,64 +447,6 @@ func _build_ui() -> void:
 		lbl.add_theme_font_size_override("font_size", 12)
 		controls_grid.add_child(lbl)
 
-	# Audio Settings Panel
-	var audio_panel := PanelContainer.new()
-	audio_panel.add_theme_stylebox_override(
-		"panel",
-		_make_iron_stylebox(Color("#0f0e0d"), Color("#383431"), Vector4i(1, 1, 1, 1), "", Color.TRANSPARENT, 1, Vector4i(16, 12, 16, 12))
-	)
-	card_vbox.add_child(audio_panel)
-
-	var audio_vbox := VBoxContainer.new()
-	audio_vbox.add_theme_constant_override("separation", 8)
-	audio_panel.add_child(audio_vbox)
-
-	var master_row := _make_slider_row("MASTER", 80.0, func(val: float) -> void:
-		if master_vol_value != null:
-			master_vol_value.text = "%d%%" % int(round(val))
-		if on_master_volume_change.is_valid():
-			on_master_volume_change.call(val / 100.0)
-	)
-	master_vol_slider = master_row["slider"]
-	master_vol_value = master_row["value_label"]
-	audio_vbox.add_child(master_row["row"])
-
-	var music_row := _make_slider_row("MUSIC", 60.0, func(val: float) -> void:
-		if music_vol_value != null:
-			music_vol_value.text = "%d%%" % int(round(val))
-		if on_music_volume_change.is_valid():
-			on_music_volume_change.call(val / 100.0)
-	)
-	music_vol_slider = music_row["slider"]
-	music_vol_value = music_row["value_label"]
-	audio_vbox.add_child(music_row["row"])
-
-	var sfx_row := _make_slider_row("SFX", 80.0, func(val: float) -> void:
-		if sfx_vol_value != null:
-			sfx_vol_value.text = "%d%%" % int(round(val))
-		if on_sfx_volume_change.is_valid():
-			on_sfx_volume_change.call(val / 100.0)
-	)
-	sfx_vol_slider = sfx_row["slider"]
-	sfx_vol_value = sfx_row["value_label"]
-	audio_vbox.add_child(sfx_row["row"])
-
-	var mute_hbox := HBoxContainer.new()
-	mute_hbox.alignment = BoxContainer.ALIGNMENT_END
-	audio_vbox.add_child(mute_hbox)
-
-	mute_button = Button.new()
-	mute_button.name = "muteButton"
-	mute_button.text = "MUTE AUDIO"
-	mute_button.focus_mode = Control.FOCUS_NONE
-	mute_button.pressed.connect(func() -> void:
-		var is_muted := false
-		if on_toggle_mute.is_valid():
-			is_muted = bool(on_toggle_mute.call())
-		_update_mute_button_label(is_muted)
-	)
-	mute_hbox.add_child(mute_button)
-
 	# Action Buttons
 	action_button = Button.new()
 	action_button.name = "actionButton"
@@ -511,6 +463,16 @@ func _build_ui() -> void:
 	)
 	card_vbox.add_child(action_button)
 
+	settings_button = Button.new()
+	settings_button.name = "settingsButton"
+	settings_button.text = "SETTINGS"
+	settings_button.custom_minimum_size = Vector2(0.0, 36.0)
+	settings_button.focus_mode = Control.FOCUS_NONE
+	settings_button.pressed.connect(func() -> void:
+		settings_modal.visible = true
+	)
+	card_vbox.add_child(settings_button)
+
 	chronicle_button = Button.new()
 	chronicle_button.name = "chronicleButton"
 	chronicle_button.text = "THE CHRONICLE"
@@ -520,6 +482,169 @@ func _build_ui() -> void:
 		chronicle_modal.visible = true
 	)
 	card_vbox.add_child(chronicle_button)
+
+	# 7. Settings Modal Overlay
+	var sett_bg := ColorRect.new()
+	sett_bg.name = "settingsModal"
+	sett_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sett_bg.color = Color(0.0, 0.0, 0.0, 0.88)
+	sett_bg.visible = false
+	sett_bg.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed:
+			sett_bg.visible = false
+	)
+	add_child(sett_bg)
+	settings_modal = sett_bg
+
+	var sett_center := CenterContainer.new()
+	sett_center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sett_bg.add_child(sett_center)
+
+	var sett_card := PanelContainer.new()
+	sett_card.custom_minimum_size = Vector2(540.0, 0.0)
+	sett_card.add_theme_stylebox_override(
+		"panel",
+		_make_iron_stylebox(
+			Color("#161413"),
+			Color("#d97706"),
+			Vector4i(6, 2, 2, 2),
+			"left",
+			Color("#d97706"),
+			6,
+			Vector4i(28, 24, 28, 24)
+		)
+	)
+	sett_center.add_child(sett_card)
+
+	var sett_vbox := VBoxContainer.new()
+	sett_vbox.add_theme_constant_override("separation", 14)
+	sett_card.add_child(sett_vbox)
+
+	var sett_header := HBoxContainer.new()
+	sett_vbox.add_child(sett_header)
+
+	var sett_title := Label.new()
+	sett_title.text = "SETTINGS"
+	sett_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sett_title.add_theme_color_override("font_color", Color("#fbbf24"))
+	sett_title.add_theme_font_size_override("font_size", 18)
+	sett_header.add_child(sett_title)
+
+	settings_close_button = Button.new()
+	settings_close_button.name = "settingsCloseButton"
+	settings_close_button.text = "×"
+	settings_close_button.focus_mode = Control.FOCUS_NONE
+	settings_close_button.pressed.connect(func() -> void:
+		settings_modal.visible = false
+	)
+	sett_header.add_child(settings_close_button)
+
+	# Video Settings Section
+	var video_panel := PanelContainer.new()
+	video_panel.add_theme_stylebox_override(
+		"panel",
+		_make_iron_stylebox(Color("#12100f"), Color("#383430"), Vector4i(1, 1, 1, 1), "", Color.TRANSPARENT, 1, Vector4i(14, 12, 14, 12))
+	)
+	var video_vbox := VBoxContainer.new()
+	video_vbox.add_theme_constant_override("separation", 8)
+	video_panel.add_child(video_vbox)
+
+	var video_title := Label.new()
+	video_title.text = "VIDEO"
+	video_title.add_theme_color_override("font_color", Color("#d97706"))
+	video_title.add_theme_font_size_override("font_size", 13)
+	video_vbox.add_child(video_title)
+
+	var scale_row := _make_render_scale_slider_row(100.0, func(val: float) -> void:
+		_update_render_scale_label(val)
+		if self.on_render_scale_change.is_valid():
+			self.on_render_scale_change.call(val / 100.0)
+	)
+	render_scale_slider = scale_row["slider"]
+	render_scale_value = scale_row["value_label"]
+	video_vbox.add_child(scale_row["row"])
+	sett_vbox.add_child(video_panel)
+
+	# Audio Settings Section
+	var audio_panel := PanelContainer.new()
+	audio_panel.add_theme_stylebox_override(
+		"panel",
+		_make_iron_stylebox(Color("#12100f"), Color("#383430"), Vector4i(1, 1, 1, 1), "", Color.TRANSPARENT, 1, Vector4i(14, 12, 14, 12))
+	)
+	var audio_vbox := VBoxContainer.new()
+	audio_vbox.add_theme_constant_override("separation", 8)
+	audio_panel.add_child(audio_vbox)
+
+	var audio_title := Label.new()
+	audio_title.text = "AUDIO"
+	audio_title.add_theme_color_override("font_color", Color("#d97706"))
+	audio_title.add_theme_font_size_override("font_size", 13)
+	audio_vbox.add_child(audio_title)
+
+	var master_row := _make_slider_row("MASTER", 80.0, func(val: float) -> void:
+		if master_vol_value != null:
+			master_vol_value.text = "%d%%" % int(round(val))
+		if self.on_master_volume_change.is_valid():
+			self.on_master_volume_change.call(val / 100.0)
+	)
+	master_vol_slider = master_row["slider"]
+	master_vol_value = master_row["value_label"]
+	audio_vbox.add_child(master_row["row"])
+
+	var music_row := _make_slider_row("MUSIC", 60.0, func(val: float) -> void:
+		if music_vol_value != null:
+			music_vol_value.text = "%d%%" % int(round(val))
+		if self.on_music_volume_change.is_valid():
+			self.on_music_volume_change.call(val / 100.0)
+	)
+	music_vol_slider = music_row["slider"]
+	music_vol_value = music_row["value_label"]
+	audio_vbox.add_child(music_row["row"])
+
+	var sfx_row := _make_slider_row("SFX", 80.0, func(val: float) -> void:
+		if sfx_vol_value != null:
+			sfx_vol_value.text = "%d%%" % int(round(val))
+		if self.on_sfx_volume_change.is_valid():
+			self.on_sfx_volume_change.call(val / 100.0)
+	)
+	sfx_vol_slider = sfx_row["slider"]
+	sfx_vol_value = sfx_row["value_label"]
+	audio_vbox.add_child(sfx_row["row"])
+
+	var mute_hbox := HBoxContainer.new()
+	mute_hbox.alignment = BoxContainer.ALIGNMENT_END
+	audio_vbox.add_child(mute_hbox)
+
+	mute_button = Button.new()
+	mute_button.name = "muteButton"
+	mute_button.text = "MUTE AUDIO"
+	mute_button.focus_mode = Control.FOCUS_NONE
+	mute_button.pressed.connect(func() -> void:
+		var is_muted := false
+		if self.on_toggle_mute.is_valid():
+			is_muted = bool(self.on_toggle_mute.call())
+		_update_mute_button_label(is_muted)
+	)
+	mute_hbox.add_child(mute_button)
+	sett_vbox.add_child(audio_panel)
+
+	# Back Button & Footer
+	settings_back_button = Button.new()
+	settings_back_button.name = "settingsBackButton"
+	settings_back_button.text = "BACK"
+	settings_back_button.custom_minimum_size = Vector2(0.0, 36.0)
+	settings_back_button.focus_mode = Control.FOCUS_NONE
+	settings_back_button.pressed.connect(func() -> void:
+		settings_modal.visible = false
+	)
+	sett_vbox.add_child(settings_back_button)
+
+	var sett_footer := Label.new()
+	sett_footer.text = "PRESS [ESC] OR CLICK TO RETURN"
+	sett_footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sett_footer.add_theme_color_override("font_color", Color("#78716c"))
+	sett_footer.add_theme_font_size_override("font_size", 11)
+	sett_vbox.add_child(sett_footer)
 
 	# 7. Chronicle Modal Overlay
 	var chron_bg := ColorRect.new()
@@ -673,27 +798,83 @@ func _make_slider_row(label_text: String, initial_val: float, on_change: Callabl
 	}
 
 
+func _make_render_scale_slider_row(initial_pct: float, on_change: Callable) -> Dictionary:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+
+	var lbl := Label.new()
+	lbl.text = "3D RENDER SCALE"
+	lbl.custom_minimum_size = Vector2(130.0, 0.0)
+	lbl.add_theme_color_override("font_color", Color("#a8a29e"))
+	lbl.add_theme_font_size_override("font_size", 11)
+	row.add_child(lbl)
+
+	var slider := HSlider.new()
+	slider.min_value = 50.0
+	slider.max_value = 100.0
+	slider.step = 5.0
+	slider.value = initial_pct
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider.focus_mode = Control.FOCUS_NONE
+	slider.value_changed.connect(on_change)
+	row.add_child(slider)
+
+	var val_lbl := Label.new()
+	val_lbl.custom_minimum_size = Vector2(110.0, 0.0)
+	val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	val_lbl.add_theme_color_override("font_color", Color("#fbbf24"))
+	val_lbl.add_theme_font_size_override("font_size", 11)
+	row.add_child(val_lbl)
+
+	_update_render_scale_label_node(val_lbl, initial_pct)
+
+	return {
+		"row": row,
+		"slider": slider,
+		"value_label": val_lbl,
+	}
+
+
+func _update_render_scale_label(pct: float) -> void:
+	if render_scale_value != null:
+		_update_render_scale_label_node(render_scale_value, pct)
+
+
+func _update_render_scale_label_node(lbl: Label, pct: float) -> void:
+	var factor := pct / 100.0
+	var w := int(round(1280.0 * factor))
+	var h := int(round(720.0 * factor))
+	lbl.text = "%d%% [%d×%d]" % [int(round(pct)), w, h]
+
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var ke := event as InputEventKey
 		if ke.pressed and not ke.echo and ke.keycode == KEY_ESCAPE:
-			if chronicle_modal != null and chronicle_modal.visible:
+			if settings_modal != null and settings_modal.visible:
+				settings_modal.visible = false
+				get_viewport().set_input_as_handled()
+			elif chronicle_modal != null and chronicle_modal.visible:
 				chronicle_modal.visible = false
 				get_viewport().set_input_as_handled()
 
 
 func handle_escape_key() -> bool:
+	if settings_modal != null and settings_modal.visible:
+		settings_modal.visible = false
+		return true
 	if chronicle_modal != null and chronicle_modal.visible:
 		chronicle_modal.visible = false
 		return true
 	return false
 
 
-func sync_audio_settings(data: Dictionary) -> void:
+func sync_settings(data: Dictionary) -> void:
 	var master_pct := int(round(float(data.get("master_volume", 0.8)) * 100.0))
 	var music_pct := int(round(float(data.get("music_volume", 0.6)) * 100.0))
 	var sfx_pct := int(round(float(data.get("sfx_volume", 0.8)) * 100.0))
 	var is_muted := bool(data.get("is_muted", false))
+	var render_scale_pct := int(round(float(data.get("render_scale", 1.0)) * 100.0))
 
 	if master_vol_slider != null:
 		master_vol_slider.set_value_no_signal(float(master_pct))
@@ -710,7 +891,16 @@ func sync_audio_settings(data: Dictionary) -> void:
 	if sfx_vol_value != null:
 		sfx_vol_value.text = "%d%%" % sfx_pct
 
+	if render_scale_slider != null:
+		render_scale_slider.set_value_no_signal(float(render_scale_pct))
+	if render_scale_value != null:
+		_update_render_scale_label(float(render_scale_pct))
+
 	_update_mute_button_label(is_muted)
+
+
+func sync_audio_settings(data: Dictionary) -> void:
+	sync_settings(data)
 
 
 func _update_mute_button_label(is_muted: bool) -> void:
@@ -783,6 +973,8 @@ func update_hud(snapshot: Dictionary) -> void:
 	if status == "PLAYING":
 		modal_overlay.visible = false
 		chronicle_modal.visible = false
+		if settings_modal != null:
+			settings_modal.visible = false
 	else:
 		modal_overlay.visible = true
 		if status == "MENU":
