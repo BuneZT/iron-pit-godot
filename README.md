@@ -40,3 +40,13 @@ godot --path .
 # Run the headless test suite
 godot --headless --path . -s res://tests/run_tests.gd
 ```
+
+---
+
+## Building for Windows
+
+Export templates and presets are pre-configured. You can build a standalone release executable (`build\IronPit.exe`) using any of the following methods:
+
+- **Double-click script:** Double-click [`build.bat`](file:///C:/Users/marci/Documents/game_dev/iron-pit-godot/build.bat).
+- **PowerShell:** Run [`.\build.ps1`](file:///C:/Users/marci/Documents/game_dev/iron-pit-godot/build.ps1) (or `.\build.ps1 -RunTests` to run the test suite first).
+- **Godot Editor:** Open the project, go to **Project** $\rightarrow$ **Export...**, select **Windows Desktop**, and click **Export Project...**.
