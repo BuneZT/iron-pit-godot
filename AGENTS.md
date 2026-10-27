@@ -171,7 +171,7 @@ Before claiming any task or feature is complete, always run and verify the headl
 
 ```powershell
 # Run all unit and scene integration tests headlessly
-& "C:\Users\marci\Downloads\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe" --headless --path "C:\Users\marci\Documents\game_dev\iron-pit-godot" -s res://tests/run_tests.gd
+& "C:\Users\marci\Documents\game_dev\Godot_v4.7.2-stable\Godot_v4.7.2-stable_win64_console.exe" --headless --path "C:\Users\marci\Documents\game_dev\iron-pit-godot" -s res://tests/run_tests.gd
 ```
 
 All tests must output `[PASS]` and exit with code `0` and zero leaked resources or script errors.
