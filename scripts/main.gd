@@ -1,8 +1,10 @@
 class_name GameApp
 extends Node3D
 
-const AUDIO_SETTINGS_PATH: String = "user://iron_pit_audio_settings.json"
+const SETTINGS_PATH: String = "user://iron_pit_settings.json"
+const LEGACY_AUDIO_SETTINGS_PATH: String = "user://iron_pit_audio_settings.json"
 
+var settings: GameSettings
 var game_state: GameState = GameState.new()
 var health_state: HealthState = HealthState.new(100.0, 0.8)
 var weapon_state: WeaponState = WeaponState.new({
@@ -28,7 +30,8 @@ var total_time: float = 0.0
 
 func _ready() -> void:
 	name = "GameApp"
-	var settings := _load_audio_settings()
+	settings = _load_settings()
+	_apply_video_settings()
 	audio = AudioManager.new(settings)
 	add_child(audio)
 	audio.preload_sounds()
@@ -56,26 +59,30 @@ func _ready() -> void:
 		Callable(self, "handle_modal_action"),
 		{
 			"on_master_volume_change": func(val: float) -> void:
-				audio.settings.set_master_volume(val)
+				settings.set_master_volume(val)
 				audio.apply_settings()
-				_save_audio_settings(),
+				_save_settings(),
 			"on_music_volume_change": func(val: float) -> void:
-				audio.settings.set_music_volume(val)
+				settings.set_music_volume(val)
 				audio.apply_settings()
-				_save_audio_settings(),
+				_save_settings(),
 			"on_sfx_volume_change": func(val: float) -> void:
-				audio.settings.set_sfx_volume(val)
+				settings.set_sfx_volume(val)
 				audio.apply_settings()
-				_save_audio_settings(),
+				_save_settings(),
 			"on_toggle_mute": func() -> bool:
-				var is_muted := audio.settings.toggle_mute()
+				var is_muted := settings.toggle_mute()
 				audio.apply_settings()
-				_save_audio_settings()
+				_save_settings()
 				return is_muted,
+			"on_render_scale_change": func(val: float) -> void:
+				settings.set_render_scale(val)
+				_apply_video_settings()
+				_save_settings(),
 		}
 	)
 	add_child(hud)
-	hud.sync_audio_settings(audio.settings.data)
+	hud.sync_settings(settings.data)
 	sync_hud()
 
 
@@ -238,20 +245,32 @@ func update_game(dt: float) -> void:
 	sync_hud()
 
 
-func _load_audio_settings() -> AudioSettings:
-	if FileAccess.file_exists(AUDIO_SETTINGS_PATH):
-		var file := FileAccess.open(AUDIO_SETTINGS_PATH, FileAccess.READ)
+func _apply_video_settings() -> void:
+	var vp := get_viewport()
+	if vp != null:
+		vp.scaling_3d_scale = settings.render_scale
+
+
+func _load_settings() -> GameSettings:
+	if FileAccess.file_exists(SETTINGS_PATH):
+		var file := FileAccess.open(SETTINGS_PATH, FileAccess.READ)
 		if file != null:
 			var content := file.get_as_text()
 			file.close()
-			return AudioSettings.deserialize(content)
-	return AudioSettings.new()
+			return GameSettings.deserialize(content)
+	elif FileAccess.file_exists(LEGACY_AUDIO_SETTINGS_PATH):
+		var file := FileAccess.open(LEGACY_AUDIO_SETTINGS_PATH, FileAccess.READ)
+		if file != null:
+			var content := file.get_as_text()
+			file.close()
+			return GameSettings.deserialize(content)
+	return GameSettings.new()
 
 
-func _save_audio_settings() -> void:
-	var file := FileAccess.open(AUDIO_SETTINGS_PATH, FileAccess.WRITE)
+func _save_settings() -> void:
+	var file := FileAccess.open(SETTINGS_PATH, FileAccess.WRITE)
 	if file != null:
-		file.store_string(audio.settings.serialize())
+		file.store_string(settings.serialize())
 		file.close()
 
 

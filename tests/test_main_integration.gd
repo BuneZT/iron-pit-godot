@@ -24,6 +24,20 @@ func test_main_scene_boots_in_menu_and_transitions_through_full_match_lifecycle(
 	assert_true(_app.hud.modal_overlay.visible)
 	assert_eq(_app.hud.modal_title.text, "IRON PIT")
 	assert_eq(_app.hud.action_button.text, "ENTER THE PIT")
+	assert_not_null(_app.hud.settings_button)
+
+	# Verify viewport 3D render scaling is applied from settings
+	assert_not_null(_app.settings)
+	assert_near(_app.get_viewport().scaling_3d_scale, _app.settings.render_scale)
+
+	# Test settings modal opening and changing render scale slider
+	_app.hud.settings_button.pressed.emit()
+	assert_true(_app.hud.settings_modal.visible)
+	_app.hud.render_scale_slider.value = 60.0
+	assert_near(_app.settings.render_scale, 0.60)
+	assert_near(_app.get_viewport().scaling_3d_scale, 0.60)
+	_app.hud.settings_close_button.pressed.emit()
+	assert_false(_app.hud.settings_modal.visible)
 
 	# Start match via HUD action button
 	_app.hud.action_button.pressed.emit()
