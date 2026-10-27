@@ -29,11 +29,11 @@
 - Create: `tests/run_tests.gd`
 - Create: `tests/test_case.gd`
 
-- [ ] **Step 1: Create `project.godot`, `default_bus_layout.tres`, and `.gitignore`**
-- [ ] **Step 2: Create `tests/test_case.gd` and `tests/run_tests.gd` headless test harness**
-- [ ] **Step 3: Create `AGENT.md`, `AGENTS.md`, and `README.md` with Godot 4.7 best practices**
-- [ ] **Step 4: Run headless test runner to verify Godot 4.7.2 project boots cleanly**
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 1: Create `project.godot`, `default_bus_layout.tres`, and `.gitignore`**
+- [x] **Step 2: Create `tests/test_case.gd` and `tests/run_tests.gd` headless test harness**
+- [x] **Step 3: Create `AGENT.md`, `AGENTS.md`, and `README.md` with Godot 4.7 best practices**
+- [x] **Step 4: Run headless test runner to verify Godot 4.7.2 project boots cleanly**
+- [x] **Step 5: Commit Task 1**
 
 ---
 
@@ -55,10 +55,10 @@
 - Create: `tests/test_lore_catalog.gd`
 - Create: `tests/test_arena_layout_generator.gd`
 
-- [ ] **Step 1: Write core unit test suites (`test_game_state.gd`, `test_health_state.gd`, `test_weapon_state.gd`, `test_wave_manager.gd`, `test_audio_settings.gd`, `test_lore_catalog.gd`, `test_arena_layout_generator.gd`)**
-- [ ] **Step 2: Implement pure `RefCounted` core modules matching 100% of original TypeScript behavior**
-- [ ] **Step 3: Run headless test suite and verify all core unit tests pass**
-- [ ] **Step 4: Commit Task 2**
+- [x] **Step 1: Write core unit test suites (`test_game_state.gd`, `test_health_state.gd`, `test_weapon_state.gd`, `test_wave_manager.gd`, `test_audio_settings.gd`, `test_lore_catalog.gd`, `test_arena_layout_generator.gd`)**
+- [x] **Step 2: Implement pure `RefCounted` core modules matching 100% of original TypeScript behavior**
+- [x] **Step 3: Run headless test suite and verify all core unit tests pass**
+- [x] **Step 4: Commit Task 2**
 
 ---
 
@@ -68,10 +68,10 @@
 - Create: `scripts/scene/arena_builder.gd`
 - Create: `tests/test_arena_builder.gd`
 
-- [ ] **Step 1: Write `tests/test_arena_builder.gd` verifying brazier collisions, dynamic layout rebuilds, and nearest-neighbor materials**
-- [ ] **Step 2: Implement `scripts/scene/arena_builder.gd` (overcast ash-grey exponential fog, directional shadow light, 100x100m floor, 4 parapets with crooked spikes, invisible boundary walls, megaliths with chipped caps/rubble/iron bands, barricades with iron caps/stepping fragments, and 6 tripod braziers with `OmniLight3D` and resanctification)**
-- [ ] **Step 3: Run headless test suite to verify `test_arena_builder.gd` passes**
-- [ ] **Step 4: Commit Task 3**
+- [x] **Step 1: Write `tests/test_arena_builder.gd` verifying brazier collisions, dynamic layout rebuilds, and nearest-neighbor materials**
+- [x] **Step 2: Implement `scripts/scene/arena_builder.gd` (overcast ash-grey exponential fog, directional shadow light, 100x100m floor, 4 parapets with crooked spikes, invisible boundary walls, megaliths with chipped caps/rubble/iron bands, barricades with iron caps/stepping fragments, and 6 tripod braziers with `OmniLight3D` and resanctification)**
+- [x] **Step 3: Run headless test suite to verify `test_arena_builder.gd` passes**
+- [x] **Step 4: Commit Task 3**
 
 ---
 
@@ -83,10 +83,10 @@
 - Create: `scenes/Player.tscn`
 - Create: `tests/test_player_controller.gd`
 
-- [ ] **Step 1: Write `tests/test_player_controller.gd` testing jump velocity, apex (>2.0m), landing at y=0.9, no double-jump, ±49.2m arena clamp, camera far plane (49.2m), and brazier collision**
-- [ ] **Step 2: Implement `player_controller.gd`, `weapon_controller.gd` (9-part blackened-iron carbine viewmodel, muzzle flash cone, `OmniLight3D` burst, 3D tracer line, center-screen raycast), and `scenes/Player.tscn`**
-- [ ] **Step 3: Run headless test suite to verify player and brazier interaction tests pass**
-- [ ] **Step 4: Commit Task 4**
+- [x] **Step 1: Write `tests/test_player_controller.gd` testing jump velocity, apex (>2.0m), landing at y=0.9, no double-jump, ±49.2m arena clamp, camera far plane (49.2m), and brazier collision**
+- [x] **Step 2: Implement `player_controller.gd`, `weapon_controller.gd` (9-part blackened-iron carbine viewmodel, muzzle flash cone, `OmniLight3D` burst, 3D tracer line, center-screen raycast), and `scenes/Player.tscn`**
+- [x] **Step 3: Run headless test suite to verify player and brazier interaction tests pass**
+- [x] **Step 4: Commit Task 4**
 
 ---
 
@@ -96,10 +96,10 @@
 - Create: `scripts/scene/enemy_controller.gd`
 - Create: `tests/test_enemy_controller.gd`
 
-- [ ] **Step 1: Write `tests/test_enemy_controller.gd` testing 3D contact damage (perched vs grounded), vertical pursuit leap, obstacle vault leap, ±49.2m arena clamp, fog spawn point distance (>=22m), non-lethal stagger, and fatal ragdoll knockdown**
-- [ ] **Step 2: Implement `scripts/scene/enemy_controller.gd` with invisible `RigidBody3D` capsule, 21 articulated low-poly child meshes with raycast hitboxes, upright angular lock while alive, and rotational topple impulse on death**
-- [ ] **Step 3: Run headless test suite to verify `test_enemy_controller.gd` passes**
-- [ ] **Step 4: Commit Task 5**
+- [x] **Step 1: Write `tests/test_enemy_controller.gd` testing 3D contact damage (perched vs grounded), vertical pursuit leap, obstacle vault leap, ±49.2m arena clamp, fog spawn point distance (>=22m), non-lethal stagger, and fatal ragdoll knockdown**
+- [x] **Step 2: Implement `scripts/scene/enemy_controller.gd` with invisible `RigidBody3D` capsule, 21 articulated low-poly child meshes with raycast hitboxes, upright angular lock while alive, and rotational topple impulse on death**
+- [x] **Step 3: Run headless test suite to verify `test_enemy_controller.gd` passes**
+- [x] **Step 4: Commit Task 5**
 
 ---
 
@@ -111,10 +111,10 @@
 - Create: `scenes/HUD.tscn`
 - Create: `tests/test_hud_controller_lore.gd`
 
-- [ ] **Step 1: Write `tests/test_hud_controller_lore.gd` testing start menu subtitle, game over lore subtitle, wave whisper visibility during breather vs combat, Chronicle modal open/close/Escape, crosshair pulse, and audio sliders**
-- [ ] **Step 2: Implement `audio_manager.gd`, `hud_controller.gd`, and `scenes/HUD.tscn`**
-- [ ] **Step 3: Run headless test suite to verify `test_hud_controller_lore.gd` passes**
-- [ ] **Step 4: Commit Task 6**
+- [x] **Step 1: Write `tests/test_hud_controller_lore.gd` testing start menu subtitle, game over lore subtitle, wave whisper visibility during breather vs combat, Chronicle modal open/close/Escape, crosshair pulse, and audio sliders**
+- [x] **Step 2: Implement `audio_manager.gd`, `hud_controller.gd`, and `scenes/HUD.tscn`**
+- [x] **Step 3: Run headless test suite to verify `test_hud_controller_lore.gd` passes**
+- [x] **Step 4: Commit Task 6**
 
 ---
 
@@ -126,7 +126,7 @@
 - Create: `tests/test_main_integration.gd`
 - Create: `.github/workflows/ci.yml`
 
-- [ ] **Step 1: Implement `scripts/main.gd` and `scenes/Main.tscn` wiring `ArenaBuilder`, `PlayerController`, `WeaponController`, `EnemyController`, `AudioManager`, `HUDController`, and all core states**
-- [ ] **Step 2: Write `tests/test_main_integration.gd` verifying full match lifecycle (MENU -> start match -> fire weapon -> hit/kill enemy -> wave progression -> pause/resume -> game over)**
-- [ ] **Step 3: Run full headless test suite and full scene boot check with Godot 4.7.2**
-- [ ] **Step 4: Create GitHub repository `BuneZT/iron-pit-godot` and push `main` branch**
+- [x] **Step 1: Implement `scripts/main.gd` and `scenes/Main.tscn` wiring `ArenaBuilder`, `PlayerController`, `WeaponController`, `EnemyController`, `AudioManager`, `HUDController`, and all core states**
+- [x] **Step 2: Write `tests/test_main_integration.gd` verifying full match lifecycle (MENU -> start match -> fire weapon -> hit/kill enemy -> wave progression -> pause/resume -> game over)**
+- [x] **Step 3: Run full headless test suite and full scene boot check with Godot 4.7.2**
+- [x] **Step 4: Create GitHub repository `BuneZT/iron-pit-godot` and push `main` branch**

@@ -1,0 +1,27 @@
+name: Godot 4.7 Headless Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Headless Unit & Integration Tests
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+
+      - name: Import project assets
+        run: godot --headless --import
+
+      - name: Run headless test suite
+        run: godot --headless -s res://tests/run_tests.gd

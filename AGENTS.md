@@ -62,6 +62,7 @@ iron-pit-godot/
 * **Rule:** All gameplay rules, state machines, timers, ammo/damage math, wave scaling, lore strings, and procedural layout generation **must** live in `res://scripts/core/` as pure `RefCounted` classes (`extends RefCounted`) with **zero dependencies on `Node`, `SceneTree`, or `PhysicsServer3D`**.
 * **Why:** Pure `RefCounted` objects instantiate in microseconds without scene tree overhead, cannot leak orphan nodes, and allow deterministic unit tests (`tests/test_*.gd`) to run headlessly in milliseconds.
 * **Static Typing Mandatory:** Every variable, parameter, and function return type in GDScript 2.0 must use explicit static typing (`var hp: float = 100.0`, `func update(dt: float) -> int:`). Never use untyped dynamic variants where a concrete type or `Dictionary`/`Array[T]` applies.
+* **GDScript 2.0 Lambda Value-Capture Rule:** In GDScript 2.0, anonymous lambdas (`func(...) -> void:`) capture local primitive and struct variables (`int`, `float`, `bool`, `String`, `Vector3`) **by value**, not by reference. When a callback needs to mutate state visible to the caller, mutate a property on `self` / a `RefCounted` instance or an entry in a captured `Dictionary`/`Array`.
 
 ### 3.2 Zero Runtime Allocation Churn in `_process` / `_physics_process`
 In a 60–144 FPS 3D shooter, creating `Node` instances, `StandardMaterial3D` resources, or `Mesh` resources inside per-frame loops causes frame-time spikes:
