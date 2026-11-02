@@ -108,3 +108,42 @@ func test_builds_23_part_anatomy_and_handles_stagger_and_fatal_knockdown() -> vo
 	assert_false(_enemy.root.axis_lock_angular_z)
 	assert_gt(_enemy.last_applied_impulse.z, 20.0)
 	assert_gt(_enemy.last_applied_impulse.y, 6.0)
+	assert_eq(_enemy.hitbox_area.collision_layer, 0)
+
+
+func test_shares_materials_and_physics_resources_across_spawned_enemies() -> void:
+	var second_enemy := _controller.spawn_enemy(1)
+	assert_eq(_enemy.body_mat, second_enemy.body_mat)
+	assert_eq(_enemy.horn_mat, second_enemy.horn_mat)
+	assert_eq(_enemy.visor_mat, second_enemy.visor_mat)
+	assert_eq(_enemy.root.physics_material_override, second_enemy.root.physics_material_override)
+
+	# Hit first enemy -> switches to shared flash material without mutating second enemy's material
+	_controller.apply_hit(_enemy.id, 35.0, Vector3(0.0, 1.2, 0.0), Vector3(0.0, 0.0, 1.0))
+	assert_ne(_enemy.body_mat, second_enemy.body_mat)
+	assert_true(_enemy.body_mat.emission_enabled)
+	assert_false(second_enemy.body_mat.emission_enabled)
+
+	# After flash timer expires, first enemy returns to shared alive body material
+	_controller.update(0.15, Vector3(0.0, 0.9, 10.0), 1)
+	assert_eq(_enemy.body_mat, second_enemy.body_mat)
+
+
+func test_pools_despawned_enemy_node_hierarchies_for_zero_allocation_reuse() -> void:
+	var original_root := _enemy.root
+	# Kill and despawn _enemy
+	_controller.apply_hit(_enemy.id, 150.0, Vector3(0.0, 1.5, 0.0), Vector3(0.0, 0.0, 1.0))
+	assert_eq(_enemy.state, "KNOCKED_DOWN")
+	_controller.update(3.0, Vector3(0.0, 0.9, 10.0), 1)
+	assert_eq(_controller.enemies.size(), 0)
+	assert_eq(_controller.get_pooled_count(), 1)
+
+	# Next spawn reuses the pooled RigidBody3D hierarchy with restored state and hitboxes
+	var reused := _controller.spawn_enemy(2, Vector3(0.0, 0.9, 10.0))
+	assert_eq(_controller.get_pooled_count(), 0)
+	assert_eq(reused.root, original_root)
+	assert_eq(reused.state, "ALIVE")
+	assert_eq(reused.hitbox_area.collision_layer, 8)
+	assert_true(reused.root.axis_lock_angular_x)
+	assert_eq(int(reused.root.get_meta("enemy_id")), reused.id)
+	assert_eq(int(reused.hitbox_area.get_meta("enemy_id")), reused.id)

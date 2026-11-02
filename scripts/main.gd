@@ -26,6 +26,8 @@ var enemy_controller: EnemyController
 var arena_builder: ArenaBuilder
 var brazier_lights: Array[OmniLight3D] = []
 var total_time: float = 0.0
+var _brazier_accum: float = 0.0
+var _hud_snapshot: Dictionary = {}
 
 
 func _ready() -> void:
@@ -79,10 +81,21 @@ func _ready() -> void:
 				settings.set_render_scale(val)
 				_apply_video_settings()
 				_save_settings(),
+			"on_graphics_quality_change": func(val: String) -> void:
+				settings.set_graphics_quality(val)
+				_apply_video_settings()
+				_save_settings(),
 		}
 	)
 	add_child(hud)
+	_apply_video_settings()
 	hud.sync_settings(settings.data)
+	if get_viewport() != null:
+		get_viewport().size_changed.connect(func() -> void:
+			_apply_video_settings()
+			if hud != null and settings != null:
+				hud._update_render_scale_label(settings.render_scale * 100.0)
+		)
 	sync_hud()
 
 
@@ -104,7 +117,14 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(raw_dt: float) -> void:
 	var dt := minf(raw_dt, 0.1)
 	total_time += dt
-	update_braziers(total_time, wave_manager.current_wave)
+	if game_state.status == "PLAYING":
+		if settings != null and settings.graphics_quality == "LOW":
+			_brazier_accum += dt
+			if _brazier_accum >= 0.05:
+				_brazier_accum = 0.0
+				update_braziers(total_time, wave_manager.current_wave)
+		else:
+			update_braziers(total_time, wave_manager.current_wave)
 	update_game(dt)
 
 
@@ -246,9 +266,24 @@ func update_game(dt: float) -> void:
 
 
 func _apply_video_settings() -> void:
+	if settings == null:
+		return
 	var vp := get_viewport()
 	if vp != null:
+		vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 		vp.scaling_3d_scale = settings.render_scale
+		RenderingServer.viewport_set_scaling_3d_mode(
+			vp.get_viewport_rid(),
+			RenderingServer.VIEWPORT_SCALING_3D_MODE_BILINEAR
+		)
+		RenderingServer.viewport_set_scaling_3d_scale(
+			vp.get_viewport_rid(),
+			settings.render_scale
+		)
+	if arena_builder != null:
+		arena_builder.apply_graphics_quality(settings.graphics_quality)
+	if enemy_controller != null:
+		enemy_controller.apply_graphics_quality(settings.graphics_quality)
 
 
 func _load_settings() -> GameSettings:
@@ -275,17 +310,16 @@ func _save_settings() -> void:
 
 
 func sync_hud() -> void:
-	hud.update_hud({
-		"status": game_state.status,
-		"wave": wave_manager.current_wave,
-		"remaining_enemies": wave_manager.remaining_enemies,
-		"is_in_breather": wave_manager.is_in_breather,
-		"kills": game_state.kills,
-		"score": game_state.score,
-		"hp": health_state.current,
-		"max_hp": health_state.max_hp,
-		"ammo": weapon_state.ammo,
-		"magazine_size": weapon_state.magazine_size,
-		"is_reloading": weapon_state.is_reloading,
-		"is_curse_broken": game_state.is_curse_broken,
-	})
+	_hud_snapshot["status"] = game_state.status
+	_hud_snapshot["wave"] = wave_manager.current_wave
+	_hud_snapshot["remaining_enemies"] = wave_manager.remaining_enemies
+	_hud_snapshot["is_in_breather"] = wave_manager.is_in_breather
+	_hud_snapshot["kills"] = game_state.kills
+	_hud_snapshot["score"] = game_state.score
+	_hud_snapshot["hp"] = health_state.current
+	_hud_snapshot["max_hp"] = health_state.max_hp
+	_hud_snapshot["ammo"] = weapon_state.ammo
+	_hud_snapshot["magazine_size"] = weapon_state.magazine_size
+	_hud_snapshot["is_reloading"] = weapon_state.is_reloading
+	_hud_snapshot["is_curse_broken"] = game_state.is_curse_broken
+	hud.update_hud(_hud_snapshot)

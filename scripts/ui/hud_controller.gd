@@ -7,6 +7,7 @@ var on_music_volume_change: Callable
 var on_sfx_volume_change: Callable
 var on_toggle_mute: Callable
 var on_render_scale_change: Callable
+var on_graphics_quality_change: Callable
 
 var wave_value: Label
 var enemies_label: Label
@@ -28,8 +29,10 @@ var action_button: Button
 var settings_button: Button
 var chronicle_button: Button
 var chronicle_modal: Control
+var chronicle_card: PanelContainer
 var chronicle_close_button: Button
 var settings_modal: Control
+var settings_card: PanelContainer
 var settings_close_button: Button
 var settings_back_button: Button
 var wave_whisper: Control
@@ -37,6 +40,7 @@ var wave_whisper_label: Label
 
 var render_scale_slider: HSlider
 var render_scale_value: Label
+var graphics_quality_button: Button
 var master_vol_slider: HSlider
 var master_vol_value: Label
 var music_vol_slider: HSlider
@@ -50,6 +54,17 @@ var _crosshair_hit_timer: float = 0.0
 var _vignette_timer: float = 0.0
 var _is_expanded: bool = false
 var _is_hit: bool = false
+
+var _last_wave: int = -1
+var _last_is_in_breather: int = -1
+var _last_remaining_enemies: int = -1
+var _last_kills: int = -1
+var _last_score: int = -1
+var _last_hp_int: int = -1
+var _last_max_hp_int: int = -1
+var _last_ammo: int = -1
+var _last_is_reloading: int = -1
+var _last_status: String = ""
 
 
 func _init(action_cb: Callable = Callable(), audio_callbacks: Dictionary = {}) -> void:
@@ -66,6 +81,8 @@ func _init(action_cb: Callable = Callable(), audio_callbacks: Dictionary = {}) -
 		on_toggle_mute = audio_callbacks["on_toggle_mute"]
 	if audio_callbacks.has("on_render_scale_change"):
 		on_render_scale_change = audio_callbacks["on_render_scale_change"]
+	if audio_callbacks.has("on_graphics_quality_change"):
+		on_graphics_quality_change = audio_callbacks["on_graphics_quality_change"]
 
 	_build_ui()
 
@@ -498,10 +515,13 @@ func _build_ui() -> void:
 
 	var sett_center := CenterContainer.new()
 	sett_center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sett_center.mouse_filter = Control.MOUSE_FILTER_PASS
 	sett_bg.add_child(sett_center)
 
 	var sett_card := PanelContainer.new()
+	sett_card.name = "settingsCard"
 	sett_card.custom_minimum_size = Vector2(540.0, 0.0)
+	sett_card.mouse_filter = Control.MOUSE_FILTER_STOP
 	sett_card.add_theme_stylebox_override(
 		"panel",
 		_make_iron_stylebox(
@@ -515,6 +535,7 @@ func _build_ui() -> void:
 		)
 	)
 	sett_center.add_child(sett_card)
+	settings_card = sett_card
 
 	var sett_vbox := VBoxContainer.new()
 	sett_vbox.add_theme_constant_override("separation", 14)
@@ -563,6 +584,32 @@ func _build_ui() -> void:
 	render_scale_slider = scale_row["slider"]
 	render_scale_value = scale_row["value_label"]
 	video_vbox.add_child(scale_row["row"])
+
+	var quality_row := HBoxContainer.new()
+	quality_row.add_theme_constant_override("separation", 12)
+	var quality_lbl := Label.new()
+	quality_lbl.text = "GRAPHICS QUALITY"
+	quality_lbl.custom_minimum_size = Vector2(130.0, 0.0)
+	quality_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	quality_lbl.add_theme_color_override("font_color", Color("#a8a29e"))
+	quality_lbl.add_theme_font_size_override("font_size", 11)
+	quality_row.add_child(quality_lbl)
+
+	graphics_quality_button = Button.new()
+	graphics_quality_button.name = "graphicsQualityButton"
+	graphics_quality_button.text = "MEDIUM"
+	graphics_quality_button.custom_minimum_size = Vector2(110.0, 28.0)
+	graphics_quality_button.focus_mode = Control.FOCUS_NONE
+	graphics_quality_button.pressed.connect(func() -> void:
+		var next_q := _cycle_graphics_quality(graphics_quality_button.text)
+		_update_graphics_quality_button(next_q)
+		if self.on_graphics_quality_change.is_valid():
+			self.on_graphics_quality_change.call(next_q)
+	)
+	quality_row.add_child(graphics_quality_button)
+	_update_graphics_quality_button("MEDIUM")
+	video_vbox.add_child(quality_row)
+
 	sett_vbox.add_child(video_panel)
 
 	# Audio Settings Section
@@ -661,10 +708,13 @@ func _build_ui() -> void:
 
 	var chron_center := CenterContainer.new()
 	chron_center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	chron_center.mouse_filter = Control.MOUSE_FILTER_PASS
 	chron_bg.add_child(chron_center)
 
 	var chron_card := PanelContainer.new()
+	chron_card.name = "chronicleCard"
 	chron_card.custom_minimum_size = Vector2(580.0, 0.0)
+	chron_card.mouse_filter = Control.MOUSE_FILTER_STOP
 	chron_card.add_theme_stylebox_override(
 		"panel",
 		_make_iron_stylebox(
@@ -678,6 +728,7 @@ func _build_ui() -> void:
 		)
 	)
 	chron_center.add_child(chron_card)
+	chronicle_card = chron_card
 
 	var chron_vbox := VBoxContainer.new()
 	chron_vbox.add_theme_constant_override("separation", 14)
@@ -778,7 +829,9 @@ func _make_slider_row(label_text: String, initial_val: float, on_change: Callabl
 	slider.max_value = 100.0
 	slider.step = 1.0
 	slider.value = initial_val
+	slider.custom_minimum_size = Vector2(0.0, 24.0)
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider. size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	slider.focus_mode = Control.FOCUS_NONE
 	slider.value_changed.connect(on_change)
 	row.add_child(slider)
@@ -814,7 +867,9 @@ func _make_render_scale_slider_row(initial_pct: float, on_change: Callable) -> D
 	slider.max_value = 100.0
 	slider.step = 5.0
 	slider.value = initial_pct
+	slider.custom_minimum_size = Vector2(0.0, 24.0)
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	slider.focus_mode = Control.FOCUS_NONE
 	slider.value_changed.connect(on_change)
 	row.add_child(slider)
@@ -842,9 +897,41 @@ func _update_render_scale_label(pct: float) -> void:
 
 func _update_render_scale_label_node(lbl: Label, pct: float) -> void:
 	var factor := pct / 100.0
-	var w := int(round(1280.0 * factor))
-	var h := int(round(720.0 * factor))
+	var base_w := 1280.0
+	var base_h := 720.0
+	if is_inside_tree() and get_viewport() != null:
+		var vp_size := get_viewport().get_visible_rect().size
+		if vp_size.x > 0.0 and vp_size.y > 0.0:
+			base_w = vp_size.x
+			base_h = vp_size.y
+	var w := int(round(base_w * factor))
+	var h := int(round(base_h * factor))
 	lbl.text = "%d%% [%d×%d]" % [int(round(pct)), w, h]
+
+
+static func _cycle_graphics_quality(current: String) -> String:
+	match current.strip_edges().to_upper():
+		"LOW":
+			return "MEDIUM"
+		"MEDIUM":
+			return "HIGH"
+		"HIGH":
+			return "LOW"
+		_:
+			return "MEDIUM"
+
+
+func _update_graphics_quality_button(quality: String) -> void:
+	if graphics_quality_button == null:
+		return
+	var norm := GameSettings._normalize_quality(quality)
+	graphics_quality_button.text = norm
+	var col := Color("#fbbf24")
+	if norm == "LOW":
+		col = Color("#34d399")
+	elif norm == "HIGH":
+		col = Color("#f87171")
+	graphics_quality_button.add_theme_color_override("font_color", col)
 
 
 func _input(event: InputEvent) -> void:
@@ -875,6 +962,7 @@ func sync_settings(data: Dictionary) -> void:
 	var sfx_pct := int(round(float(data.get("sfx_volume", 0.8)) * 100.0))
 	var is_muted := bool(data.get("is_muted", false))
 	var render_scale_pct := int(round(float(data.get("render_scale", 1.0)) * 100.0))
+	var graphics_quality := String(data.get("graphics_quality", "MEDIUM"))
 
 	if master_vol_slider != null:
 		master_vol_slider.set_value_no_signal(float(master_pct))
@@ -896,6 +984,7 @@ func sync_settings(data: Dictionary) -> void:
 	if render_scale_value != null:
 		_update_render_scale_label(float(render_scale_pct))
 
+	_update_graphics_quality_button(graphics_quality)
 	_update_mute_button_label(is_muted)
 
 
@@ -915,53 +1004,62 @@ func _update_mute_button_label(is_muted: bool) -> void:
 func update_hud(snapshot: Dictionary) -> void:
 	var wave: int = maxi(1, int(snapshot.get("wave", 1)))
 	var is_in_breather: bool = bool(snapshot.get("is_in_breather", false))
+	var breather_int: int = 1 if is_in_breather else 0
 	var remaining_enemies: int = int(snapshot.get("remaining_enemies", 0))
 	var kills: int = int(snapshot.get("kills", 0))
 	var score: int = int(snapshot.get("score", 0))
 	var hp: float = float(snapshot.get("hp", 100.0))
 	var max_hp: float = maxf(1.0, float(snapshot.get("max_hp", 100.0)))
+	var hp_int: int = int(round(hp))
+	var max_hp_int: int = int(round(max_hp))
 	var ammo: int = int(snapshot.get("ammo", 12))
 	var is_reloading: bool = bool(snapshot.get("is_reloading", false))
+	var reloading_int: int = 1 if is_reloading else 0
 	var status: String = String(snapshot.get("status", "MENU"))
 
-	var wave_str := str(wave)
-	if wave_value.text != wave_str:
-		wave_value.text = wave_str
+	var wave_changed := (wave != _last_wave)
+	var breather_changed := (breather_int != _last_is_in_breather)
+	var remaining_changed := (remaining_enemies != _last_remaining_enemies)
+	var kills_changed := (kills != _last_kills)
+	var score_changed := (score != _last_score)
+	var status_changed := (status != _last_status)
 
-	var target_enemies_label := "Status" if is_in_breather else "Hostiles"
-	var target_enemies_value := "PURGED" if is_in_breather else str(remaining_enemies)
-	if enemies_label.text != target_enemies_label:
-		enemies_label.text = target_enemies_label
-	if enemies_value.text != target_enemies_value:
-		enemies_value.text = target_enemies_value
+	if wave_changed:
+		wave_value.text = str(wave)
 
-	var kills_str := str(kills)
-	if kills_value.text != kills_str:
-		kills_value.text = kills_str
+	if breather_changed or remaining_changed:
+		enemies_label.text = "Status" if is_in_breather else "Hostiles"
+		enemies_value.text = "PURGED" if is_in_breather else str(remaining_enemies)
+
+	if kills_changed:
+		kills_value.text = str(kills)
+
+	if hp_int != _last_hp_int or max_hp_int != _last_max_hp_int:
+		_last_hp_int = hp_int
+		_last_max_hp_int = max_hp_int
+		health_text.text = "%d / %d" % [hp_int, max_hp_int]
 
 	var hp_pct := clampf((hp / max_hp) * 100.0, 0.0, 100.0)
-	var hp_str := "%d / %d" % [int(round(hp)), int(round(max_hp))]
-	if health_text.text != hp_str:
-		health_text.text = hp_str
 	var target_anchor := hp_pct / 100.0
 	if absf(health_bar_fill.anchor_right - target_anchor) > 0.001:
 		health_bar_fill.anchor_right = target_anchor
 
-	var ammo_str := str(ammo)
-	if ammo_value.text != ammo_str:
-		ammo_value.text = ammo_str
+	if ammo != _last_ammo or reloading_int != _last_is_reloading:
+		if ammo != _last_ammo:
+			ammo_value.text = str(ammo)
+		var target_hint := "READY"
+		if is_reloading:
+			target_hint = "RELOADING..."
+		elif ammo == 0:
+			target_hint = "PRESS [R] TO RELOAD"
+		elif ammo <= 3:
+			target_hint = "LOW AMMO [R]"
+		if reload_hint.text != target_hint:
+			reload_hint.text = target_hint
+		_last_ammo = ammo
+		_last_is_reloading = reloading_int
 
-	var target_hint := "READY"
-	if is_reloading:
-		target_hint = "RELOADING..."
-	elif ammo == 0:
-		target_hint = "PRESS [R] TO RELOAD"
-	elif ammo <= 3:
-		target_hint = "LOW AMMO [R]"
-	if reload_hint.text != target_hint:
-		reload_hint.text = target_hint
-
-	if wave_whisper != null:
+	if wave_whisper != null and (breather_changed or wave_changed):
 		if is_in_breather:
 			var whisper_text := LoreCatalog.get_wave_whisper(wave)
 			if wave_whisper_label.text != whisper_text:
@@ -971,24 +1069,33 @@ func update_hud(snapshot: Dictionary) -> void:
 			wave_whisper.visible = false
 
 	if status == "PLAYING":
-		modal_overlay.visible = false
-		chronicle_modal.visible = false
-		if settings_modal != null:
-			settings_modal.visible = false
+		if status_changed or modal_overlay.visible:
+			modal_overlay.visible = false
+			chronicle_modal.visible = false
+			if settings_modal != null:
+				settings_modal.visible = false
 	else:
 		modal_overlay.visible = true
-		if status == "MENU":
-			modal_title.text = "IRON PIT"
-			modal_subtitle.text = LoreCatalog.INTRO_SUBTITLE
-			action_button.text = "ENTER THE PIT"
-		elif status == "PAUSED":
-			modal_title.text = "PAUSED"
-			modal_subtitle.text = "Wave %d suspended — %d hostiles slain." % [wave, kills]
-			action_button.text = "RESUME FIGHT"
-		elif status == "GAME_OVER":
-			modal_title.text = "OVERRUN"
-			modal_subtitle.text = LoreCatalog.get_game_over_message(wave, kills, score)
-			action_button.text = "RETURN TO PIT"
+		if status_changed or wave_changed or kills_changed or score_changed:
+			if status == "MENU":
+				modal_title.text = "IRON PIT"
+				modal_subtitle.text = LoreCatalog.INTRO_SUBTITLE
+				action_button.text = "ENTER THE PIT"
+			elif status == "PAUSED":
+				modal_title.text = "PAUSED"
+				modal_subtitle.text = "Wave %d suspended — %d hostiles slain." % [wave, kills]
+				action_button.text = "RESUME FIGHT"
+			elif status == "GAME_OVER":
+				modal_title.text = "OVERRUN"
+				modal_subtitle.text = LoreCatalog.get_game_over_message(wave, kills, score)
+				action_button.text = "RETURN TO PIT"
+
+	_last_wave = wave
+	_last_is_in_breather = breather_int
+	_last_remaining_enemies = remaining_enemies
+	_last_kills = kills
+	_last_score = score
+	_last_status = status
 
 
 func pulse_crosshair(hit_enemy: bool) -> void:

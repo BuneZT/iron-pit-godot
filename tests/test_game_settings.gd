@@ -8,6 +8,19 @@ func test_initializes_with_default_values() -> void:
 	assert_near(settings.sfx_volume, 0.8)
 	assert_false(settings.is_muted)
 	assert_near(settings.render_scale, 1.0)
+	assert_eq(settings.graphics_quality, "MEDIUM")
+
+
+func test_validates_and_normalizes_graphics_quality_presets() -> void:
+	var settings := GameSettings.new()
+	settings.set_graphics_quality("low")
+	assert_eq(settings.graphics_quality, "LOW")
+
+	settings.set_graphics_quality("HIGH")
+	assert_eq(settings.graphics_quality, "HIGH")
+
+	settings.set_graphics_quality("INVALID_VALUE")
+	assert_eq(settings.graphics_quality, "MEDIUM")
 
 
 func test_clamps_render_scale_between_half_and_one() -> void:
@@ -61,6 +74,7 @@ func test_serializes_and_deserializes_unified_settings() -> void:
 		"sfx_volume": 0.9,
 		"is_muted": true,
 		"render_scale": 0.65,
+		"graphics_quality": "LOW",
 	})
 
 	var json := original.serialize()
@@ -71,6 +85,7 @@ func test_serializes_and_deserializes_unified_settings() -> void:
 	assert_near(restored.sfx_volume, 0.9)
 	assert_true(restored.is_muted)
 	assert_near(restored.render_scale, 0.65)
+	assert_eq(restored.graphics_quality, "LOW")
 
 
 func test_deserializes_legacy_audio_only_settings_with_default_render_scale() -> void:

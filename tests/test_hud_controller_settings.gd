@@ -68,6 +68,7 @@ func test_sync_settings_updates_all_sliders_and_labels() -> void:
 		"sfx_volume": 0.85,
 		"is_muted": true,
 		"render_scale": 0.60,
+		"graphics_quality": "LOW",
 	})
 
 	assert_near(hud.master_vol_slider.value, 45.0)
@@ -79,3 +80,32 @@ func test_sync_settings_updates_all_sliders_and_labels() -> void:
 	assert_eq(hud.mute_button.text, "UNMUTE AUDIO")
 	assert_near(hud.render_scale_slider.value, 60.0)
 	assert_true(hud.render_scale_value.text.begins_with("60%"))
+	assert_eq(hud.graphics_quality_button.text, "LOW")
+
+
+func test_settings_card_blocks_mouse_click_from_closing_modal() -> void:
+	hud.settings_button.emit_signal("pressed")
+	assert_true(hud.settings_modal.visible)
+	assert_not_null(hud.settings_card)
+	assert_eq(hud.settings_card.mouse_filter, Control.MOUSE_FILTER_STOP)
+	assert_gte(hud.render_scale_slider.custom_minimum_size.y, 20.0)
+
+
+func test_graphics_quality_button_cycles_presets_and_fires_callback() -> void:
+	var selected: Array[String] = [""]
+	hud.on_graphics_quality_change = func(q: String) -> void:
+		selected[0] = q
+
+	assert_eq(hud.graphics_quality_button.text, "MEDIUM")
+
+	hud.graphics_quality_button.emit_signal("pressed")
+	assert_eq(hud.graphics_quality_button.text, "HIGH")
+	assert_eq(selected[0], "HIGH")
+
+	hud.graphics_quality_button.emit_signal("pressed")
+	assert_eq(hud.graphics_quality_button.text, "LOW")
+	assert_eq(selected[0], "LOW")
+
+	hud.graphics_quality_button.emit_signal("pressed")
+	assert_eq(hud.graphics_quality_button.text, "MEDIUM")
+	assert_eq(selected[0], "MEDIUM")

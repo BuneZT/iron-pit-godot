@@ -21,6 +21,13 @@ var crypt_mat: StandardMaterial3D
 var iron_mat: StandardMaterial3D
 var ember_mat: StandardMaterial3D
 
+var _box_mesh_cache: Dictionary = {}
+var _box_shape_cache: Dictionary = {}
+var _cyl_mesh_cache: Dictionary = {}
+var _cyl_shape_cache: Dictionary = {}
+var _ember_sphere_mesh: SphereMesh
+var _current_graphics_quality: String = "MEDIUM"
+
 
 func _init() -> void:
 	name = "ArenaBuilder"
@@ -62,9 +69,9 @@ func _init_atmosphere() -> void:
 	directional_light.light_color = Color(0.75, 0.76, 0.78)
 	directional_light.light_energy = 0.45
 	directional_light.shadow_enabled = true
-	directional_light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	directional_light.directional_shadow_max_distance = 50.0
-	directional_light.shadow_blur = 1.2
+	directional_light.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	directional_light.directional_shadow_max_distance = 48.0
+	directional_light.shadow_blur = 0.0
 	add_child(directional_light)
 
 
@@ -75,6 +82,8 @@ func _init_materials() -> void:
 	floor_mat.albedo_texture = floor_tex
 	floor_mat.uv1_scale = Vector3(40.0, 40.0, 1.0)
 	floor_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	floor_mat.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
+	floor_mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	floor_mat.roughness = 0.98
 	floor_mat.metallic_specular = 0.01
 	floor_mat.set_meta("max_simultaneous_lights", 10)
@@ -85,6 +94,8 @@ func _init_materials() -> void:
 	wall_mat.albedo_texture = wall_tex
 	wall_mat.uv1_scale = Vector3(8.0, 2.5, 1.0)
 	wall_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	wall_mat.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
+	wall_mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	wall_mat.roughness = 0.98
 	wall_mat.metallic_specular = 0.01
 	wall_mat.set_meta("max_simultaneous_lights", 10)
@@ -95,6 +106,8 @@ func _init_materials() -> void:
 	crypt_mat.albedo_texture = crypt_tex
 	crypt_mat.uv1_scale = Vector3(3.0, 3.0, 1.0)
 	crypt_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	crypt_mat.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
+	crypt_mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	crypt_mat.roughness = 0.98
 	crypt_mat.metallic_specular = 0.01
 	crypt_mat.set_meta("max_simultaneous_lights", 10)
@@ -105,16 +118,58 @@ func _init_materials() -> void:
 	iron_mat.albedo_texture = iron_tex
 	iron_mat.uv1_scale = Vector3(2.0, 2.0, 1.0)
 	iron_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	iron_mat.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
 	iron_mat.roughness = 0.88
 	iron_mat.metallic_specular = 0.12
 	iron_mat.set_meta("max_simultaneous_lights", 10)
 
 	ember_mat = StandardMaterial3D.new()
 	ember_mat.resource_name = "brazierEmberMat"
+	ember_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	ember_mat.albedo_color = Color(1.0, 0.55, 0.1)
-	ember_mat.emission_enabled = true
-	ember_mat.emission = Color(1.0, 0.45, 0.05)
-	ember_mat.emission_energy_multiplier = 1.5
+
+
+func _get_box_mesh(size: Vector3) -> BoxMesh:
+	var key := "%.3f_%.3f_%.3f" % [size.x, size.y, size.z]
+	if not _box_mesh_cache.has(key):
+		var box_mesh := BoxMesh.new()
+		box_mesh.size = size
+		_box_mesh_cache[key] = box_mesh
+	return _box_mesh_cache[key]
+
+
+func _get_box_shape(size: Vector3) -> BoxShape3D:
+	var key := "%.3f_%.3f_%.3f" % [size.x, size.y, size.z]
+	if not _box_shape_cache.has(key):
+		var box_shape := BoxShape3D.new()
+		box_shape.size = size
+		_box_shape_cache[key] = box_shape
+	return _box_shape_cache[key]
+
+
+func _get_cyl_mesh(diam_top: float, diam_bottom: float, height: float, tessellation: int) -> CylinderMesh:
+	var segs := maxi(4, tessellation)
+	var key := "%.3f_%.3f_%.3f_%d" % [diam_top, diam_bottom, height, segs]
+	if not _cyl_mesh_cache.has(key):
+		var cyl_mesh := CylinderMesh.new()
+		cyl_mesh.top_radius = diam_top / 2.0
+		cyl_mesh.bottom_radius = diam_bottom / 2.0
+		cyl_mesh.height = height
+		cyl_mesh.radial_segments = segs
+		cyl_mesh.rings = 1
+		_cyl_mesh_cache[key] = cyl_mesh
+	return _cyl_mesh_cache[key]
+
+
+func _get_cyl_shape(diam_top: float, diam_bottom: float, height: float) -> CylinderShape3D:
+	var radius := maxf(diam_top, diam_bottom) / 2.0
+	var key := "%.3f_%.3f" % [radius, height]
+	if not _cyl_shape_cache.has(key):
+		var cyl_shape := CylinderShape3D.new()
+		cyl_shape.height = height
+		cyl_shape.radius = radius
+		_cyl_shape_cache[key] = cyl_shape
+	return _cyl_shape_cache[key]
 
 
 func _create_box_mesh_node(
@@ -130,9 +185,7 @@ func _create_box_mesh_node(
 ) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.name = node_name
-	var box_mesh := BoxMesh.new()
-	box_mesh.size = size
-	mi.mesh = box_mesh
+	mi.mesh = _get_box_mesh(size)
 	mi.material_override = mat
 	mi.position = pos
 	mi.rotation = rot
@@ -146,9 +199,7 @@ func _create_box_mesh_node(
 		body.collision_layer = 1
 		body.collision_mask = 0
 		var col := CollisionShape3D.new()
-		var box_shape := BoxShape3D.new()
-		box_shape.size = size
-		col.shape = box_shape
+		col.shape = _get_box_shape(size)
 		body.add_child(col)
 		mi.add_child(body)
 		mi.set_meta("physics_body", body)
@@ -173,13 +224,7 @@ func _create_cylinder_mesh_node(
 ) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.name = node_name
-	var cyl_mesh := CylinderMesh.new()
-	cyl_mesh.top_radius = diam_top / 2.0
-	cyl_mesh.bottom_radius = diam_bottom / 2.0
-	cyl_mesh.height = height
-	cyl_mesh.radial_segments = maxi(4, tessellation)
-	cyl_mesh.rings = 1
-	mi.mesh = cyl_mesh
+	mi.mesh = _get_cyl_mesh(diam_top, diam_bottom, height, tessellation)
 	mi.material_override = mat
 	mi.position = pos
 	mi.rotation = rot
@@ -193,10 +238,7 @@ func _create_cylinder_mesh_node(
 		body.collision_layer = 1
 		body.collision_mask = 0
 		var col := CollisionShape3D.new()
-		var cyl_shape := CylinderShape3D.new()
-		cyl_shape.height = height
-		cyl_shape.radius = maxf(diam_top, diam_bottom) / 2.0
-		col.shape = cyl_shape
+		col.shape = _get_cyl_shape(diam_top, diam_bottom, height)
 		body.add_child(col)
 		mi.add_child(body)
 		mi.set_meta("physics_body", body)
@@ -258,6 +300,8 @@ func _build_static_perimeter() -> void:
 		},
 	]
 
+	var spike_transforms: Array[Transform3D] = []
+
 	for cfg in wall_configs:
 		var w_name: String = cfg["name"]
 		var w_width: float = float(cfg["w"])
@@ -302,20 +346,22 @@ func _build_static_perimeter() -> void:
 				parapet_height + spike_h / 2.0,
 				w_z if is_along_x else float(i) * step
 			)
-			_create_cylinder_mesh_node(
-				"%s_spike_%d" % [w_name, i],
-				0.02,
-				0.12,
-				spike_h,
-				5,
-				spike_pos,
-				Vector3(tilt_x, 0.0, tilt_z),
-				iron_mat,
-				_static_container,
-				false,
-				false,
-				false
-			)
+			var spike_basis := Basis.from_euler(Vector3(tilt_x, 0.0, tilt_z)).scaled(Vector3(1.0, spike_h, 1.0))
+			spike_transforms.append(Transform3D(spike_basis, spike_pos))
+
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = _get_cyl_mesh(0.02, 0.12, 1.0, 5)
+	mm.instance_count = spike_transforms.size()
+	for idx in range(spike_transforms.size()):
+		mm.set_instance_transform(idx, spike_transforms[idx])
+
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = "parapetSpikesMultiMesh"
+	mmi.multimesh = mm
+	mmi.material_override = iron_mat
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_static_container.add_child(mmi)
 
 
 func rebuild_dynamic_layout(layout: Dictionary) -> Array[OmniLight3D]:
@@ -482,7 +528,7 @@ func rebuild_dynamic_layout(layout: Dictionary) -> Array[OmniLight3D]:
 				_dynamic_container,
 				false,
 				true,
-				true
+				false
 			)
 			_dynamic_nodes.append(leg)
 
@@ -518,16 +564,19 @@ func rebuild_dynamic_layout(layout: Dictionary) -> Array[OmniLight3D]:
 		)
 		_dynamic_nodes.append(bowl)
 
+		if _ember_sphere_mesh == null:
+			_ember_sphere_mesh = SphereMesh.new()
+			_ember_sphere_mesh.radius = 0.425
+			_ember_sphere_mesh.height = 0.85
+			_ember_sphere_mesh.radial_segments = 6
+			_ember_sphere_mesh.rings = 4
+
 		var embers := MeshInstance3D.new()
 		embers.name = "brazierEmbers_%d" % idx
-		var sphere := SphereMesh.new()
-		sphere.radius = 0.425
-		sphere.height = 0.85
-		sphere.radial_segments = 6
-		sphere.rings = 4
-		embers.mesh = sphere
+		embers.mesh = _ember_sphere_mesh
 		embers.material_override = ember_mat
 		embers.position = Vector3(bx, 1.82, bz)
+		embers.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		embers.set_meta("check_collisions", false)
 		embers.set_meta("is_pickable", false)
 		_dynamic_container.add_child(embers)
@@ -539,10 +588,48 @@ func rebuild_dynamic_layout(layout: Dictionary) -> Array[OmniLight3D]:
 		fire_light.light_color = Color(1.0, 0.62, 0.22)
 		fire_light.light_energy = 0.95
 		fire_light.omni_range = 22.0
+		fire_light.distance_fade_enabled = true
+		fire_light.distance_fade_begin = 30.0
+		fire_light.distance_fade_length = 12.0
 		_dynamic_container.add_child(fire_light)
 		brazier_lights.append(fire_light)
 
+	apply_graphics_quality(_current_graphics_quality)
 	return brazier_lights
+
+
+func apply_graphics_quality(quality: String) -> void:
+	_current_graphics_quality = GameSettings._normalize_quality(quality)
+	var fade_begin := 30.0
+	var fade_len := 12.0
+
+	if _current_graphics_quality == "LOW":
+		if directional_light != null:
+			directional_light.shadow_enabled = false
+		fade_begin = 22.0
+		fade_len = 8.0
+	elif _current_graphics_quality == "HIGH":
+		if directional_light != null:
+			directional_light.shadow_enabled = true
+			directional_light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+			directional_light.directional_shadow_max_distance = 50.0
+			directional_light.shadow_blur = 0.5
+		fade_begin = 38.0
+		fade_len = 12.0
+	else:
+		if directional_light != null:
+			directional_light.shadow_enabled = true
+			directional_light.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+			directional_light.directional_shadow_max_distance = 48.0
+			directional_light.shadow_blur = 0.0
+		fade_begin = 30.0
+		fade_len = 12.0
+
+	for light in brazier_lights:
+		if is_instance_valid(light):
+			light.distance_fade_enabled = true
+			light.distance_fade_begin = fade_begin
+			light.distance_fade_length = fade_len
 
 
 func update_brazier_resanctification(wave: int) -> void:

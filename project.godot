@@ -30,11 +30,15 @@ window/stretch/mode="canvas_items"
 
 [physics]
 
-common/physics_ticks_per_second=120
+common/physics_ticks_per_second=60
 3d/physics_engine="Jolt Physics"
 3d/default_gravity=18.0
-common/physics_interpolation=true
+common/physics_interpolation=false
 
 [rendering]
 
 textures/canvas_textures/default_texture_filter=0
+lights_and_shadows/directional_shadow/size=2048
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=0
+lights_and_shadows/positional_shadow/atlas_size=1024
+anti_aliasing/quality/msaa_3d=0

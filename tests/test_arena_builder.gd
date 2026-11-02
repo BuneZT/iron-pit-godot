@@ -88,3 +88,30 @@ func test_configures_materials_to_support_simultaneous_lights_and_nearest_filter
 	assert_not_null(mat)
 	assert_eq(mat.texture_filter, BaseMaterial3D.TEXTURE_FILTER_NEAREST)
 	assert_gte(int(mat.get_meta("max_simultaneous_lights")), 8)
+	assert_eq(mat.specular_mode, BaseMaterial3D.SPECULAR_DISABLED)
+	assert_eq(mat.diffuse_mode, BaseMaterial3D.DIFFUSE_LAMBERT)
+
+
+func test_batches_parapet_spikes_into_single_multimesh_instance() -> void:
+	var mm_node := _builder.find_child("parapetSpikesMultiMesh", true, false) as MultiMeshInstance3D
+	assert_not_null(mm_node)
+	assert_not_null(mm_node.multimesh)
+	assert_eq(mm_node.multimesh.instance_count, 148)
+	assert_eq(mm_node.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+
+
+func test_enables_distance_fade_on_brazier_lights_and_applies_graphics_quality() -> void:
+	assert_gt(_builder.brazier_lights.size(), 0)
+	for light in _builder.brazier_lights:
+		assert_true(light.distance_fade_enabled)
+
+	_builder.apply_graphics_quality("LOW")
+	assert_false(_builder.directional_light.shadow_enabled)
+
+	_builder.apply_graphics_quality("MEDIUM")
+	assert_true(_builder.directional_light.shadow_enabled)
+	assert_eq(_builder.directional_light.directional_shadow_mode, DirectionalLight3D.SHADOW_ORTHOGONAL)
+
+	_builder.apply_graphics_quality("HIGH")
+	assert_true(_builder.directional_light.shadow_enabled)
+	assert_eq(_builder.directional_light.directional_shadow_mode, DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS)

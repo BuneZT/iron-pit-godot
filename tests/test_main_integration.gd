@@ -30,14 +30,37 @@ func test_main_scene_boots_in_menu_and_transitions_through_full_match_lifecycle(
 	assert_not_null(_app.settings)
 	assert_near(_app.get_viewport().scaling_3d_scale, _app.settings.render_scale)
 
-	# Test settings modal opening and changing render scale slider
+	# Test settings modal opening and changing render scale slider & graphics quality
 	_app.hud.settings_button.pressed.emit()
 	assert_true(_app.hud.settings_modal.visible)
+	_app.hud.render_scale_slider.value = 75.0
+	assert_near(_app.settings.render_scale, 0.75)
+	assert_near(_app.get_viewport().scaling_3d_scale, 0.75)
 	_app.hud.render_scale_slider.value = 60.0
 	assert_near(_app.settings.render_scale, 0.60)
 	assert_near(_app.get_viewport().scaling_3d_scale, 0.60)
+
+	_app.hud.sync_settings({
+		"master_volume": 0.8,
+		"music_volume": 0.6,
+		"sfx_volume": 0.8,
+		"is_muted": false,
+		"render_scale": 0.60,
+		"graphics_quality": "HIGH",
+	})
+	_app.hud.graphics_quality_button.pressed.emit()
+	assert_eq(_app.settings.graphics_quality, "LOW")
+	assert_false(_app.arena_builder.directional_light.shadow_enabled)
+
+	_app.hud.graphics_quality_button.pressed.emit()
+	assert_eq(_app.settings.graphics_quality, "MEDIUM")
+	assert_true(_app.arena_builder.directional_light.shadow_enabled)
+
 	_app.hud.settings_close_button.pressed.emit()
 	assert_false(_app.hud.settings_modal.visible)
+
+	# Verify muzzle OmniLight3D is culled (visible = false) when not firing
+	assert_false(_app.weapon_controller.muzzle_light.visible)
 
 	# Start match via HUD action button
 	_app.hud.action_button.pressed.emit()
@@ -57,11 +80,14 @@ func test_main_scene_boots_in_menu_and_transitions_through_full_match_lifecycle(
 
 	# Fire weapon 3 times (3 * 35 = 105 >= 100 HP -> kills enemy!)
 	_app.handle_primary_fire()
+	assert_true(_app.weapon_controller.muzzle_light.visible)
 	assert_eq(_app.weapon_state.ammo, 11)
 	assert_near(target_enemy.hp, 65.0)
 	assert_eq(target_enemy.state, "ALIVE")
 
 	_app.weapon_state.update(0.3)
+	_app.weapon_controller.update(0.3, false)
+	assert_false(_app.weapon_controller.muzzle_light.visible)
 	_app.handle_primary_fire()
 	assert_eq(_app.weapon_state.ammo, 10)
 	assert_near(target_enemy.hp, 30.0)

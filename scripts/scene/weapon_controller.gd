@@ -39,18 +39,22 @@ func setup(target_camera: Camera3D) -> void:
 	dark_iron_mat.albedo_texture = iron_tex
 	dark_iron_mat.albedo_color = Color(0.7, 0.68, 0.68)
 	dark_iron_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	dark_iron_mat.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
 	dark_iron_mat.roughness = 0.78
 	dark_iron_mat.metallic_specular = 0.2
 
 	var aged_wood_mat := StandardMaterial3D.new()
 	aged_wood_mat.resource_name = "gunWoodMat"
 	aged_wood_mat.albedo_color = Color(0.24, 0.16, 0.1)
+	aged_wood_mat.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
+	aged_wood_mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	aged_wood_mat.roughness = 0.92
 	aged_wood_mat.metallic_specular = 0.08
 
 	var brass_mat := StandardMaterial3D.new()
 	brass_mat.resource_name = "gunBrassMat"
 	brass_mat.albedo_color = Color(0.68, 0.52, 0.22)
+	brass_mat.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
 	brass_mat.roughness = 0.55
 	brass_mat.metallic_specular = 0.45
 
@@ -89,10 +93,8 @@ func setup(target_camera: Camera3D) -> void:
 
 	var flash_mat := StandardMaterial3D.new()
 	flash_mat.resource_name = "muzzleFlashMat"
+	flash_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	flash_mat.albedo_color = Color(1.0, 0.65, 0.15)
-	flash_mat.emission_enabled = true
-	flash_mat.emission = Color(1.0, 0.55, 0.05)
-	flash_mat.emission_energy_multiplier = 2.0
 
 	muzzle_flash_mesh = MeshInstance3D.new()
 	muzzle_flash_mesh.name = "muzzleFlashMesh"
@@ -114,6 +116,7 @@ func setup(target_camera: Camera3D) -> void:
 	muzzle_light.light_color = Color(1.0, 0.65, 0.2)
 	muzzle_light.omni_range = 14.0
 	muzzle_light.light_energy = 0.0
+	muzzle_light.visible = false
 	muzzle_node.add_child(muzzle_light)
 
 	_tracer_mat = StandardMaterial3D.new()
@@ -169,6 +172,7 @@ func fire_raycast() -> Dictionary:
 	muzzle_flash_mesh.visible = true
 	var s := 0.85 + randf() * 0.4
 	muzzle_flash_mesh.scale = Vector3(s, s, s)
+	muzzle_light.visible = true
 	muzzle_light.light_energy = 1.7
 
 	var origin := camera.global_position
@@ -232,6 +236,7 @@ func update(dt: float, is_reloading: bool) -> void:
 		if _muzzle_flash_timer <= 0.0:
 			muzzle_flash_mesh.visible = false
 			muzzle_light.light_energy = 0.0
+			muzzle_light.visible = false
 
 	if _tracer_timer > 0.0:
 		_tracer_timer -= dt

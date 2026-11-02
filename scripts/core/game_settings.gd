@@ -1,11 +1,14 @@
 class_name GameSettings
 extends RefCounted
 
+const VALID_QUALITIES: Array[String] = ["LOW", "MEDIUM", "HIGH"]
+
 var master_volume: float = 0.8
 var music_volume: float = 0.6
 var sfx_volume: float = 0.8
 var is_muted: bool = false
 var render_scale: float = 1.0
+var graphics_quality: String = "MEDIUM"
 
 var data: Dictionary:
 	get:
@@ -15,6 +18,7 @@ var data: Dictionary:
 			"sfx_volume": sfx_volume,
 			"is_muted": is_muted,
 			"render_scale": render_scale,
+			"graphics_quality": graphics_quality,
 		}
 
 
@@ -24,6 +28,13 @@ static func _clamp01(val: float) -> float:
 
 static func _clamp_render_scale(val: float) -> float:
 	return clampf(val, 0.5, 1.0)
+
+
+static func _normalize_quality(val: String) -> String:
+	var upper := val.strip_edges().to_upper()
+	if VALID_QUALITIES.has(upper):
+		return upper
+	return "MEDIUM"
 
 
 func _init(initial: Dictionary = {}) -> void:
@@ -62,6 +73,13 @@ func _init(initial: Dictionary = {}) -> void:
 	else:
 		render_scale = 1.0
 
+	if initial.has("graphics_quality"):
+		graphics_quality = _normalize_quality(String(initial["graphics_quality"]))
+	elif initial.has("graphicsQuality"):
+		graphics_quality = _normalize_quality(String(initial["graphicsQuality"]))
+	else:
+		graphics_quality = "MEDIUM"
+
 
 func set_master_volume(val: float) -> void:
 	master_volume = _clamp01(val)
@@ -77,6 +95,10 @@ func set_sfx_volume(val: float) -> void:
 
 func set_render_scale(val: float) -> void:
 	render_scale = _clamp_render_scale(val)
+
+
+func set_graphics_quality(val: String) -> void:
+	graphics_quality = _normalize_quality(val)
 
 
 func toggle_mute() -> bool:

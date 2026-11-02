@@ -68,7 +68,7 @@ func preload_sounds() -> void:
 
 func start_music() -> void:
 	_music_wanted = true
-	if _music_player == null:
+	if _music_player == null or DisplayServer.get_name() == "headless":
 		return
 	_music_player.volume_db = _linear_to_db_safe(_get_calculated_music_volume())
 	if not _music_player.playing:
@@ -83,7 +83,7 @@ func pause_music() -> void:
 
 
 func resume_music() -> void:
-	if not _music_wanted or _music_player == null:
+	if not _music_wanted or _music_player == null or DisplayServer.get_name() == "headless":
 		return
 	_music_player.volume_db = _linear_to_db_safe(_get_calculated_music_volume())
 	_music_player.stream_paused = false
@@ -118,7 +118,8 @@ func play(effect: String, volume_multiplier: float = 1.0) -> void:
 
 	var vol := settings.get_effective_sfx_volume(float(cfg["volume"]) * volume_multiplier)
 	player.volume_db = _linear_to_db_safe(vol)
-	player.play(0.0)
+	if DisplayServer.get_name() != "headless":
+		player.play(0.0)
 
 
 func play_distance_attenuated(
@@ -154,8 +155,20 @@ func stop_all() -> void:
 				player.stop()
 
 
+func _exit_tree() -> void:
+	stop_all()
+	if _music_player != null:
+		_music_player.stream = null
+	for key in _pools.keys():
+		var pool: Array = _pools[key]
+		for p in pool:
+			var player := p as AudioStreamPlayer
+			if player != null:
+				player.stream = null
+
+
 func apply_settings() -> void:
 	if _music_player != null:
 		_music_player.volume_db = _linear_to_db_safe(_get_calculated_music_volume())
-		if _music_wanted and not _music_player.playing and not settings.is_muted:
+		if _music_wanted and not _music_player.playing and not settings.is_muted and DisplayServer.get_name() != "headless":
 			_music_player.play()
