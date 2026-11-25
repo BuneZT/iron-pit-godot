@@ -1,0 +1,17 @@
+[remap]
+
+importer="font_data_bmfont"
+type="FontFile"
+uid="uid://fxnssxh7h05r"
+path="res://.godot/imported/iron_pixel.fnt-d1162719c57be64138cf2cc20bccf8b5.fontdata"
+
+[deps]
+
+source_file="res://assets/fonts/iron_pixel.fnt"
+dest_files=["res://.godot/imported/iron_pixel.fnt-d1162719c57be64138cf2cc20bccf8b5.fontdata"]
+
+[params]
+
+fallbacks=[]
+compress=true
+scaling_mode=2

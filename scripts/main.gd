@@ -28,6 +28,7 @@ var brazier_lights: Array[OmniLight3D] = []
 var total_time: float = 0.0
 var _brazier_accum: float = 0.0
 var _hud_snapshot: Dictionary = {}
+var _radar_enemy_positions: PackedVector3Array = PackedVector3Array()
 
 
 func _ready() -> void:
@@ -334,4 +335,27 @@ func sync_hud() -> void:
 	_hud_snapshot["magazine_size"] = weapon_state.magazine_size
 	_hud_snapshot["is_reloading"] = weapon_state.is_reloading
 	_hud_snapshot["is_curse_broken"] = game_state.is_curse_broken
+
+	if game_state.status == "PLAYING" and enemy_controller != null and player != null:
+		var alive_count := 0
+		for e_val in enemy_controller.enemies.values():
+			var enemy := e_val as EnemyController.EnemyInstance
+			if enemy != null and enemy.state == "ALIVE" and is_instance_valid(enemy.root):
+				alive_count += 1
+		_radar_enemy_positions.resize(alive_count)
+		var idx := 0
+		for e_val in enemy_controller.enemies.values():
+			var enemy := e_val as EnemyController.EnemyInstance
+			if enemy != null and enemy.state == "ALIVE" and is_instance_valid(enemy.root):
+				_radar_enemy_positions[idx] = enemy.root.global_position
+				idx += 1
+		_hud_snapshot["radar_blips"] = RadarProjector.project(
+			player.position,
+			player.yaw,
+			_radar_enemy_positions,
+			RadarProjector.DEFAULT_SCAN_RADIUS
+		)
+	else:
+		_hud_snapshot["radar_blips"] = PackedVector3Array()
+
 	hud.update_hud(_hud_snapshot)

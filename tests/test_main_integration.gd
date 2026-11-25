@@ -77,6 +77,18 @@ func test_main_scene_boots_in_menu_and_transitions_through_full_match_lifecycle(
 		part.force_update_transform()
 	await scene_tree.physics_frame
 	await scene_tree.physics_frame
+	_app.sync_hud()
+
+	# Verify alive enemy ahead appears at top of radar
+	assert_true(_app.hud.radar_widget.visible)
+	var blips_before := _app.hud.radar_widget.blips.size()
+	assert_gte(blips_before, 1)
+	var found_ahead := false
+	for b in _app.hud.radar_widget.blips:
+		if absf(b.x) < 0.05 and b.y < -0.1:
+			found_ahead = true
+			break
+	assert_true(found_ahead)
 
 	# Fire weapon 3 times (3 * 35 = 105 >= 100 HP -> kills enemy!)
 	_app.handle_primary_fire()
@@ -99,6 +111,8 @@ func test_main_scene_boots_in_menu_and_transitions_through_full_match_lifecycle(
 	assert_eq(_app.game_state.kills, 1)
 	assert_eq(_app.game_state.score, 100)
 	assert_eq(_app.wave_manager.remaining_enemies, 4)
+	# Knocked-down fiend disappears from radar immediately
+	assert_eq(_app.hud.radar_widget.blips.size(), blips_before - 1)
 
 	# Pause and resume
 	_app.pause_game()
