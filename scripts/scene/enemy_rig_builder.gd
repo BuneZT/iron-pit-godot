@@ -198,15 +198,15 @@ func _build_rusher(
 	# Sunken horned skull helm + jaw guard + asymmetrical horns + crimson visor
 	_box(rig, root, hitbox_area, "bruteSkull_%d" % id, Vector3(0.38, 0.38, 0.44), Vector3(0.0, 0.14, 0.04), Vector3(0.12, 0.0, 0.0), body_mat, rig.head_pivot, id, "body", false)
 	_box(rig, root, hitbox_area, "bruteJaw_%d" % id, Vector3(0.30, 0.14, 0.16), Vector3(0.0, -0.02, 0.20), Vector3(0.08, 0.0, 0.0), accent_mat, rig.head_pivot, id, "accent", false)
-	_cyl(rig, root, hitbox_area, "bruteHornL_%d" % id, 0.02, 0.12, 0.56, 5, Vector3(-0.17, 0.38, 0.04), Vector3(-0.42, 0.14, -0.38), horn_mat, rig.head_pivot, id, "horn", false)
-	_cyl(rig, root, hitbox_area, "bruteHornR_%d" % id, 0.08, 0.11, 0.18, 5, Vector3(0.17, 0.28, 0.04), Vector3(-0.18, -0.10, 0.32), horn_mat, rig.head_pivot, id, "horn", false)
+	_cyl(rig, root, hitbox_area, "bruteHornL_%d" % id, 0.02, 0.12, 0.54, 5, Vector3(-0.18, 0.38, 0.04), Vector3(-0.38, 0.10, 0.34), horn_mat, rig.head_pivot, id, "horn", false)
+	_cyl(rig, root, hitbox_area, "bruteHornR_%d" % id, 0.08, 0.11, 0.18, 5, Vector3(0.17, 0.28, 0.04), Vector3(-0.18, -0.10, -0.28), horn_mat, rig.head_pivot, id, "horn", false)
 	_box(rig, root, hitbox_area, "bruteVisor_%d" % id, Vector3(0.32, 0.075, 0.14), Vector3(0.0, 0.16, 0.22), Vector3.ZERO, visor_mat, rig.head_pivot, id, "visor", false)
 
 	# Asymmetrical shoulders: heavily spiked left pauldron + battered right guard
 	var pl := _box(rig, root, hitbox_area, "brutePauldronL_%d" % id, Vector3(0.38, 0.32, 0.44), Vector3(-0.04, 0.04, 0.0), Vector3(0.12, 0.05, -0.28), body_mat, rig.shoulder_l_pivot, id, "body", allow_limb_shadows)
 	rig.limb_shadow_parts.append(pl)
-	_cyl(rig, root, hitbox_area, "bruteSpikeL1_%d" % id, 0.02, 0.09, 0.38, 5, Vector3(-0.12, 0.26, 0.06), Vector3(0.10, 0.0, -0.36), horn_mat, rig.shoulder_l_pivot, id, "horn", false)
-	_cyl(rig, root, hitbox_area, "bruteSpikeL2_%d" % id, 0.02, 0.07, 0.26, 5, Vector3(-0.06, 0.22, -0.12), Vector3(-0.22, 0.0, -0.26), horn_mat, rig.shoulder_l_pivot, id, "horn", false)
+	_cyl(rig, root, hitbox_area, "bruteSpikeL1_%d" % id, 0.02, 0.085, 0.28, 5, Vector3(-0.18, 0.24, 0.05), Vector3(0.08, 0.0, 0.52), horn_mat, rig.shoulder_l_pivot, id, "horn", false)
+	_cyl(rig, root, hitbox_area, "bruteSpikeL2_%d" % id, 0.02, 0.065, 0.22, 5, Vector3(-0.15, 0.20, -0.11), Vector3(-0.22, 0.0, 0.42), horn_mat, rig.shoulder_l_pivot, id, "horn", false)
 	_box(rig, root, hitbox_area, "bruteBicepL_%d" % id, Vector3(0.20, 0.34, 0.22), Vector3(-0.02, -0.16, 0.0), Vector3.ZERO, body_mat, rig.shoulder_l_pivot, id, "body", false)
 	_box(rig, root, hitbox_area, "bruteForearmL_%d" % id, Vector3(0.22, 0.36, 0.22), Vector3(0.0, -0.16, 0.02), Vector3.ZERO, accent_mat, rig.elbow_l_pivot, id, "accent", false)
 	_cyl(rig, root, hitbox_area, "bruteClawL_%d" % id, 0.015, 0.09, 0.24, 4, Vector3(0.0, -0.40, 0.04), Vector3(PI, 0.0, 0.0), horn_mat, rig.elbow_l_pivot, id, "horn", false)
