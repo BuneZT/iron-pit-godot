@@ -50,3 +50,26 @@ Export templates and presets are pre-configured. You can build a standalone rele
 - **Double-click script:** Double-click [`build.bat`](file:///C:/Users/marci/Documents/game_dev/iron-pit-godot/build.bat).
 - **PowerShell:** Run [`.\build.ps1`](file:///C:/Users/marci/Documents/game_dev/iron-pit-godot/build.ps1) (or `.\build.ps1 -RunTests` to run the test suite first).
 - **Godot Editor:** Open the project, go to **Project** $\rightarrow$ **Export...**, select **Windows Desktop**, and click **Export Project...**.
+
+---
+
+## Building on Linux / Bazzite
+
+Run [`./build.sh`](build.sh) from the project root to build a standalone native Linux executable (`build/IronPit.x86_64`) or cross-compile for Windows:
+
+```bash
+# Build native Linux release executable (build/IronPit.x86_64)
+./build.sh
+
+# Run headless tests before building
+./build.sh --test
+
+# Build debug export
+./build.sh --debug
+
+# Cross-compile Windows executable (build/IronPit.exe) or build both
+./build.sh --windows
+./build.sh --all
+```
+
+Missing Godot export templates are downloaded and installed automatically on first run.
