@@ -128,6 +128,11 @@ func _process(raw_dt: float) -> void:
 	update_game(dt)
 
 
+func _physics_process(raw_dt: float) -> void:
+	var dt := minf(raw_dt, 0.1)
+	update_physics(dt)
+
+
 func handle_modal_action() -> void:
 	var status := game_state.status
 	if status == "MENU" or status == "GAME_OVER":
@@ -237,9 +242,16 @@ func update_game(dt: float) -> void:
 			audio.play("reload")
 
 	player.update(dt)
-	health_state.update(dt)
 	weapon_state.update(dt)
 	weapon_controller.update(dt, weapon_state.is_reloading)
+	sync_hud()
+
+
+func update_physics(dt: float) -> void:
+	if game_state.status != "PLAYING":
+		return
+
+	health_state.update(dt)
 
 	var prev_wave := wave_manager.current_wave
 	var to_spawn := wave_manager.update(dt)

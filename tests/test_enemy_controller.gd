@@ -65,6 +65,22 @@ func test_triggers_obstacle_vault_leap_when_movement_is_stalled() -> void:
 	assert_gt(_enemy.jump_cooldown, 1.0)
 
 
+func test_blocks_mid_air_jump_when_not_grounded_on_world_geometry() -> void:
+	# Enemy is suspended in open air at jump apex (vel.y == 0) with no world geometry beneath
+	_enemy.root.position = Vector3(0.0, 2.5, 0.0)
+	_enemy.prev_position = _enemy.root.position
+	_enemy.jump_cooldown = 0.0
+	_enemy.stuck_timer = 0.5
+	_enemy.root.linear_velocity = Vector3.ZERO
+	_enemy.last_applied_impulse = Vector3.ZERO
+
+	var elevated_player_pos := Vector3(0.0, 4.0, 3.0)
+	_controller.update(0.016, elevated_player_pos, 1)
+
+	assert_near(_enemy.last_applied_impulse.y, 0.0)
+	assert_near(_enemy.jump_cooldown, 0.0)
+
+
 func test_clamps_enemy_within_100m_arena_boundary() -> void:
 	_enemy.root.position = Vector3(-60.0, 0.9, 60.0)
 	_controller.update(0.016, Vector3(0.0, 0.9, 0.0), 1)

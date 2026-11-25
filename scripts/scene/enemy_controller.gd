@@ -56,6 +56,7 @@ var _shared_visor_mat: StandardMaterial3D
 var _shared_dead_visor_mat: StandardMaterial3D
 var _shared_phys_mat: PhysicsMaterial
 var _shared_capsule_shape: CapsuleShape3D
+var _ground_ray_query: PhysicsRayQueryParameters3D
 var _current_graphics_quality: String = "MEDIUM"
 var _enemy_pool: Array[EnemyInstance] = []
 var _box_mesh_cache: Dictionary = {}
@@ -138,6 +139,11 @@ func _init_shared_resources() -> void:
 	_shared_capsule_shape = CapsuleShape3D.new()
 	_shared_capsule_shape.height = 1.8
 	_shared_capsule_shape.radius = 0.42
+
+	_ground_ray_query = PhysicsRayQueryParameters3D.new()
+	_ground_ray_query.collision_mask = 1
+	_ground_ray_query.collide_with_bodies = true
+	_ground_ray_query.collide_with_areas = false
 
 
 func set_layout(new_layout: Dictionary) -> void:
@@ -875,10 +881,9 @@ func update(dt: float, player_position: Vector3, wave_number: int = 1) -> float:
 				enemy.stuck_timer = 0.0
 
 			var current_vel := enemy.root.linear_velocity
-			var is_grounded := absf(current_vel.y) < 0.8
 			var did_jump := false
 
-			if enemy.jump_cooldown <= 0.0 and is_grounded:
+			if enemy.jump_cooldown <= 0.0 and _is_enemy_grounded(enemy, pos, current_vel):
 				if vertical_diff > 0.6 and horizontal_dist <= 5.2:
 					# Case A: Vertical Pursuit Leap (player is perched above)
 					var mass := 1.5
@@ -931,6 +936,24 @@ func update(dt: float, player_position: Vector3, wave_number: int = 1) -> float:
 			)
 
 	return contact_damage_triggered
+
+
+func _is_enemy_grounded(enemy: EnemyInstance, pos: Vector3, current_vel: Vector3) -> bool:
+	if absf(current_vel.y) >= 0.8:
+		return false
+	# Capsule half-height is 0.9m; within 0.15m of arena floor (y = 0) counts as grounded
+	if pos.y <= 1.05:
+		return true
+	var world := get_world_3d()
+	if world == null:
+		return false
+	var space_state := world.direct_space_state
+	if space_state == null:
+		return false
+	var origin := enemy.root.global_position
+	_ground_ray_query.from = origin
+	_ground_ray_query.to = origin + Vector3(0.0, -1.08, 0.0)
+	return not space_state.intersect_ray(_ground_ray_query).is_empty()
 
 
 func apply_graphics_quality(quality: String) -> void:

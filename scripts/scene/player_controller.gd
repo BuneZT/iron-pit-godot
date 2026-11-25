@@ -13,7 +13,7 @@ var is_grounded: bool = true
 
 var walk_speed: float = 7.2
 var sprint_speed: float = 12.0
-var jump_speed: float = 7.8
+var jump_speed: float = 9.4
 var gravity: float = -20.0
 var mouse_sensitivity: float = 0.0022
 var max_pitch: float = deg_to_rad(82.0)

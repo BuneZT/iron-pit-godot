@@ -118,3 +118,38 @@ func test_main_scene_boots_in_menu_and_transitions_through_full_match_lifecycle(
 	assert_true(_app.hud.modal_overlay.visible)
 	assert_eq(_app.hud.modal_title.text, "OVERRUN")
 	assert_eq(_app.hud.action_button.text, "RETURN TO PIT")
+
+
+func test_jumping_enemies_do_not_float_or_freeze_mid_air_under_real_loop() -> void:
+	_app.start_new_match()
+	_app.enemy_controller.clear_all()
+
+	var jumpers: Array = []
+	for i in range(4):
+		var e := _app.enemy_controller.spawn_enemy(1, Vector3.ZERO)
+		var angle := float(i) * PI * 0.5
+		e.root.position = Vector3(cos(angle) * 4.5, 0.9, sin(angle) * 4.5)
+		e.prev_position = e.root.position
+		e.jump_cooldown = 0.0
+		jumpers.append(e)
+
+	var max_y := 0.0
+	var saw_jump := false
+	for tick in range(90):
+		_app.health_state.current = 9999.0
+		# Circle player at elevated height for first 30 ticks to force leaps + yaw updates, then drop player
+		var angle := float(tick) * 0.1
+		var py := 2.4 if tick < 30 else 0.9
+		_app.player.position = Vector3(sin(angle) * 3.0, py, cos(angle) * 3.0)
+		_app.player.vertical_velocity = 0.0
+		await scene_tree.physics_frame
+		for e in jumpers:
+			var y: float = e.root.position.y
+			max_y = maxf(max_y, y)
+			if y > 1.5:
+				saw_jump = true
+
+	assert_true(saw_jump)
+	assert_lt(max_y, 2.8)
+	for e in jumpers:
+		assert_lt(e.root.position.y, 1.2)
