@@ -14,6 +14,8 @@ class EnemyInstance:
 	var body_mat: StandardMaterial3D
 	var visor_mat: StandardMaterial3D
 	var horn_mat: StandardMaterial3D
+	var personality: String = EnemyBehavior.RUSHER
+	var behavior: EnemyBehavior.State = EnemyBehavior.State.new()
 	var hp: float
 	var state: String = "ALIVE"
 	var stagger_timer: float = 0.0
@@ -53,6 +55,7 @@ var _shared_flash_body_mat: StandardMaterial3D
 var _shared_dead_body_mat: StandardMaterial3D
 var _shared_horn_mat: StandardMaterial3D
 var _shared_visor_mat: StandardMaterial3D
+var _shared_lunge_windup_visor_mat: StandardMaterial3D
 var _shared_dead_visor_mat: StandardMaterial3D
 var _shared_phys_mat: PhysicsMaterial
 var _shared_capsule_shape: CapsuleShape3D
@@ -63,6 +66,9 @@ var _box_mesh_cache: Dictionary = {}
 var _box_shape_cache: Dictionary = {}
 var _cyl_mesh_cache: Dictionary = {}
 var _cyl_shape_cache: Dictionary = {}
+var _alive_positions_scratch: Array[Vector2] = []
+var _alive_index_scratch: Dictionary = {}
+var _behavior_result_scratch: EnemyBehavior.StepResult = EnemyBehavior.StepResult.new()
 
 
 func _init(parent_scene: Node3D = null, spawn_source: Variant = null) -> void:
@@ -127,6 +133,11 @@ func _init_shared_resources() -> void:
 	_shared_visor_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_shared_visor_mat.albedo_color = Color(1.0, 0.18, 0.02)
 
+	_shared_lunge_windup_visor_mat = StandardMaterial3D.new()
+	_shared_lunge_windup_visor_mat.resource_name = "enemySharedLungeWindupVisorMat"
+	_shared_lunge_windup_visor_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_shared_lunge_windup_visor_mat.albedo_color = EnemyBehavior.LUNGE_WINDUP_VISOR_COLOR
+
 	_shared_dead_visor_mat = StandardMaterial3D.new()
 	_shared_dead_visor_mat.resource_name = "enemySharedDeadVisorMat"
 	_shared_dead_visor_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -150,7 +161,7 @@ func set_layout(new_layout: Dictionary) -> void:
 	layout = new_layout
 
 
-func spawn_enemy(wave_number: int = 1, player_pos: Variant = null) -> EnemyInstance:
+func spawn_enemy(wave_number: int = 1, player_pos: Variant = null, forced_personality: String = "") -> EnemyInstance:
 	var id := _next_id
 	_next_id += 1
 	var spawn_pt: Vector3
@@ -167,6 +178,11 @@ func spawn_enemy(wave_number: int = 1, player_pos: Variant = null) -> EnemyInsta
 	else:
 		spawn_pt = Vector3(38.0, 1.1, 38.0)
 
+	var chosen_personality := (
+		EnemyBehavior.normalize_personality(forced_personality)
+		if forced_personality != ""
+		else EnemyBehavior.pick_personality(wave_number, randf())
+	)
 	var body_mat := _shared_body_mat
 	var horn_mat := _shared_horn_mat
 	var visor_mat := _shared_visor_mat
@@ -221,6 +237,8 @@ func spawn_enemy(wave_number: int = 1, player_pos: Variant = null) -> EnemyInsta
 			pooled.body_mat = body_mat
 			pooled.visor_mat = visor_mat
 			pooled.horn_mat = horn_mat
+			pooled.personality = chosen_personality
+			pooled.behavior.reset(chosen_personality, randf(), randf(), randf())
 			pooled.hp = max_hp + minf(40.0, float(wave_number - 1) * 10.0)
 			pooled.state = "ALIVE"
 			pooled.stagger_timer = 0.0
@@ -607,6 +625,8 @@ func spawn_enemy(wave_number: int = 1, player_pos: Variant = null) -> EnemyInsta
 	instance.body_mat = body_mat
 	instance.visor_mat = visor_mat
 	instance.horn_mat = horn_mat
+	instance.personality = chosen_personality
+	instance.behavior.reset(chosen_personality, randf(), randf(), randf())
 	instance.hp = max_hp + minf(40.0, float(wave_number - 1) * 10.0)
 	instance.state = "ALIVE"
 	instance.stagger_timer = 0.0
@@ -760,10 +780,15 @@ func apply_hit(
 		enemy.stagger_timer = 0.26
 		enemy.stuck_timer = 0.0
 		enemy.flash_timer = 0.11
+		enemy.behavior.on_stagger()
 		enemy.body_mat = _shared_flash_body_mat
 		for bp in enemy.body_parts:
 			if is_instance_valid(bp):
 				bp.material_override = _shared_flash_body_mat
+		if enemy.visor_mat != _shared_visor_mat:
+			enemy.visor_mat = _shared_visor_mat
+			if is_instance_valid(enemy.eye_visor):
+				enemy.eye_visor.material_override = _shared_visor_mat
 
 		var stagger_impulse := Vector3(
 			flat_dir.x * 11.5,
@@ -775,6 +800,7 @@ func apply_hit(
 		return "HIT"
 
 	# Fatal hit: unlock rotational inertia and launch/topple enemy backward
+	enemy.behavior.on_stagger()
 	enemy.state = "KNOCKED_DOWN"
 	enemy.despawn_timer = 2.6
 	enemy.flash_timer = 0.0
@@ -820,6 +846,16 @@ func update(dt: float, player_position: Vector3, wave_number: int = 1) -> float:
 	var chase_speed := base_move_speed + minf(2.2, float(wave_number - 1) * 0.25)
 
 	var ids := enemies.keys()
+	_alive_positions_scratch.clear()
+	_alive_index_scratch.clear()
+	for id in ids:
+		if not enemies.has(id):
+			continue
+		var e: EnemyInstance = enemies[id]
+		if e != null and e.state == "ALIVE" and is_instance_valid(e.root):
+			_alive_index_scratch[id] = _alive_positions_scratch.size()
+			_alive_positions_scratch.append(Vector2(e.root.position.x, e.root.position.z))
+
 	for id in ids:
 		if not enemies.has(id):
 			continue
@@ -874,16 +910,56 @@ func update(dt: float, player_position: Vector3, wave_number: int = 1) -> float:
 			move_dir = horizontal_vec / horizontal_dist
 
 		if horizontal_dist > 0.9:
-			var expected_dist := chase_speed * dt
-			if actual_dist < expected_dist * 0.45:
-				enemy.stuck_timer += dt
-			else:
-				enemy.stuck_timer = 0.0
-
 			var current_vel := enemy.root.linear_velocity
-			var did_jump := false
+			var is_grounded := _is_enemy_grounded(enemy, pos, current_vel)
+			var alive_idx := int(_alive_index_scratch.get(id, -1))
+			var separation_xz := (
+				EnemyBehavior.compute_separation(Vector2(pos.x, pos.z), _alive_positions_scratch, alive_idx)
+				if alive_idx >= 0
+				else Vector2.ZERO
+			)
+			var bres := EnemyBehavior.step(
+				enemy.behavior,
+				dt,
+				pos,
+				player_position,
+				chase_speed,
+				is_grounded,
+				separation_xz,
+				_behavior_result_scratch
+			)
 
-			if enemy.jump_cooldown <= 0.0 and _is_enemy_grounded(enemy, pos, current_vel):
+			if bres.started_windup and on_enemy_groan.is_valid():
+				on_enemy_groan.call(pos)
+
+			var target_visor := _shared_lunge_windup_visor_mat if bres.is_winding_up else _shared_visor_mat
+			if enemy.visor_mat != target_visor:
+				enemy.visor_mat = target_visor
+				if is_instance_valid(enemy.eye_visor):
+					enemy.eye_visor.material_override = target_visor
+
+			if bres.suppress_stuck_timer:
+				enemy.stuck_timer = 0.0
+			else:
+				var expected_dist := chase_speed * dt
+				if actual_dist < expected_dist * 0.45:
+					enemy.stuck_timer += dt
+				else:
+					enemy.stuck_timer = 0.0
+
+			var did_jump := false
+			if bres.lunge_launch_velocity.length_squared() > 0.001:
+				var mass := enemy.root.mass
+				enemy.root.linear_velocity = Vector3(0.0, current_vel.y, 0.0)
+				enemy.apply_world_impulse(bres.lunge_launch_velocity * mass, enemy.root.global_position)
+				enemy.stuck_timer = 0.0
+				did_jump = true
+			elif (
+				not bres.is_winding_up
+				and not bres.preserve_airborne_velocity
+				and enemy.jump_cooldown <= 0.0
+				and is_grounded
+			):
 				if vertical_diff > 0.6 and horizontal_dist <= 5.2:
 					# Case A: Vertical Pursuit Leap (player is perched above)
 					var mass := 1.5
@@ -913,19 +989,26 @@ func update(dt: float, player_position: Vector3, wave_number: int = 1) -> float:
 					enemy.stuck_timer = 0.0
 					did_jump = true
 
-			if not did_jump:
+			if not did_jump and not bres.preserve_airborne_velocity:
 				enemy.root.linear_velocity = Vector3(
-					move_dir.x * chase_speed,
+					bres.velocity_xz.x,
 					current_vel.y,
-					move_dir.z * chase_speed
+					bres.velocity_xz.y
 				)
 
-			var target_yaw := atan2(move_dir.x, move_dir.z)
+			var target_yaw := atan2(bres.facing_dir_xz.x, bres.facing_dir_xz.y)
 			if absf(angle_difference(enemy.current_yaw, target_yaw)) > 0.025:
 				enemy.current_yaw = target_yaw
 				enemy.root.rotation = Vector3(0.0, target_yaw, 0.0)
 		else:
 			enemy.stuck_timer = 0.0
+			if enemy.behavior.lunge_state == EnemyBehavior.LUNGE_WINDUP:
+				enemy.behavior.lunge_state = EnemyBehavior.LUNGE_CHASE
+				enemy.behavior.lunge_timer = 0.0
+			if enemy.visor_mat != _shared_visor_mat:
+				enemy.visor_mat = _shared_visor_mat
+				if is_instance_valid(enemy.eye_visor):
+					enemy.eye_visor.material_override = _shared_visor_mat
 
 		# Clamp within arena bounds (±49.2m)
 		if absf(pos.x) > 49.2 or absf(pos.z) > 49.2:

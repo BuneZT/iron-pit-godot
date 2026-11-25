@@ -134,6 +134,11 @@ func test_shares_materials_and_physics_resources_across_spawned_enemies() -> voi
 	assert_eq(_enemy.visor_mat, second_enemy.visor_mat)
 	assert_eq(_enemy.root.physics_material_override, second_enemy.root.physics_material_override)
 
+	var flanker := _controller.spawn_enemy(1, null, EnemyBehavior.FLANKER)
+	var lunger := _controller.spawn_enemy(3, null, EnemyBehavior.LUNGER)
+	assert_eq(flanker.body_mat, lunger.body_mat)
+	assert_eq(flanker.visor_mat, lunger.visor_mat)
+
 	# Hit first enemy -> switches to shared flash material without mutating second enemy's material
 	_controller.apply_hit(_enemy.id, 35.0, Vector3(0.0, 1.2, 0.0), Vector3(0.0, 0.0, 1.0))
 	assert_ne(_enemy.body_mat, second_enemy.body_mat)
@@ -154,12 +159,98 @@ func test_pools_despawned_enemy_node_hierarchies_for_zero_allocation_reuse() -> 
 	assert_eq(_controller.enemies.size(), 0)
 	assert_eq(_controller.get_pooled_count(), 1)
 
-	# Next spawn reuses the pooled RigidBody3D hierarchy with restored state and hitboxes
-	var reused := _controller.spawn_enemy(2, Vector3(0.0, 0.9, 10.0))
+	# Next spawn reuses the pooled RigidBody3D hierarchy with restored state, personality, and hitboxes
+	var reused := _controller.spawn_enemy(3, Vector3(0.0, 0.9, 10.0), EnemyBehavior.LUNGER)
 	assert_eq(_controller.get_pooled_count(), 0)
 	assert_eq(reused.root, original_root)
 	assert_eq(reused.state, "ALIVE")
+	assert_eq(reused.personality, EnemyBehavior.LUNGER)
+	assert_eq(reused.behavior.personality, EnemyBehavior.LUNGER)
+	assert_eq(reused.eye_visor.material_override, reused.visor_mat)
 	assert_eq(reused.hitbox_area.collision_layer, 8)
 	assert_true(reused.root.axis_lock_angular_x)
 	assert_eq(int(reused.root.get_meta("enemy_id")), reused.id)
 	assert_eq(int(reused.hitbox_area.get_meta("enemy_id")), reused.id)
+
+
+func test_flanker_and_weaver_steer_laterally_in_controller() -> void:
+	_controller.clear_all()
+	var flanker := _controller.spawn_enemy(1, null, EnemyBehavior.FLANKER)
+	flanker.root.position = Vector3(0.0, 0.9, 0.0)
+	flanker.prev_position = flanker.root.position
+	flanker.behavior.flank_side = 1.0
+
+	_controller.update(0.016, Vector3(0.0, 0.9, 10.0), 1)
+	assert_lt(flanker.root.linear_velocity.x, -2.0)
+	assert_gt(flanker.root.linear_velocity.z, 2.5)
+
+	_controller.clear_all()
+	var weaver := _controller.spawn_enemy(2, null, EnemyBehavior.WEAVER)
+	weaver.root.position = Vector3(0.0, 0.9, 0.0)
+	weaver.prev_position = weaver.root.position
+	weaver.behavior.weave_phase = 0.0
+	weaver.behavior.weave_freq = 3.5
+	weaver.jump_cooldown = 5.0
+
+	_controller.update(0.45, Vector3(0.0, 0.9, 10.0), 2)
+	var vx_first := weaver.root.linear_velocity.x
+	_controller.update(0.9, Vector3(0.0, 0.9, 10.0), 2)
+	var vx_second := weaver.root.linear_velocity.x
+	assert_lt(vx_first, -1.0)
+	assert_gt(vx_second, 1.0)
+
+
+func test_lunger_telegraphs_with_visor_flash_and_launches_impulse() -> void:
+	_controller.clear_all()
+	var groans := {"count": 0}
+	_controller.on_enemy_groan = func(_pos: Vector3) -> void:
+		groans["count"] = int(groans["count"]) + 1
+
+	var lunger := _controller.spawn_enemy(3, null, EnemyBehavior.LUNGER)
+	lunger.root.position = Vector3(0.0, 0.9, 0.0)
+	lunger.prev_position = lunger.root.position
+	lunger.root.linear_velocity = Vector3.ZERO
+	lunger.behavior.lunge_cooldown = 0.0
+	lunger.groan_timer = 10.0
+
+	# Enters windup at 7m: stops moving, flares visor white-gold, emits groan cue
+	_controller.update(0.016, Vector3(0.0, 0.9, 7.0), 3)
+	assert_eq(lunger.behavior.lunge_state, EnemyBehavior.LUNGE_WINDUP)
+	assert_eq(lunger.visor_mat.albedo_color, EnemyBehavior.LUNGE_WINDUP_VISOR_COLOR)
+	assert_near(lunger.root.linear_velocity.x, 0.0)
+	assert_near(lunger.root.linear_velocity.z, 0.0)
+	assert_eq(int(groans["count"]), 1)
+
+	# Shooting during windup interrupts lunge and restores crimson visor
+	_controller.apply_hit(lunger.id, 35.0, Vector3(0.0, 1.2, 0.0), Vector3(0.0, 0.0, -1.0))
+	assert_eq(lunger.behavior.lunge_state, EnemyBehavior.LUNGE_CHASE)
+	assert_eq(lunger.visor_mat, _controller._shared_visor_mat)
+
+	# Re-arm and complete full windup -> fires forward+upward Jolt impulse
+	lunger.stagger_timer = 0.0
+	lunger.behavior.lunge_cooldown = 0.0
+	lunger.root.position = Vector3(0.0, 0.9, 0.0)
+	lunger.root.linear_velocity = Vector3.ZERO
+	lunger.last_applied_impulse = Vector3.ZERO
+	_controller.update(0.016, Vector3(0.0, 0.9, 7.0), 3)
+	_controller.update(EnemyBehavior.LUNGE_WINDUP_DURATION + 0.02, Vector3(0.0, 0.9, 7.0), 3)
+	assert_gt(lunger.last_applied_impulse.z, 15.0)
+	assert_gt(lunger.last_applied_impulse.y, 6.0)
+	assert_eq(lunger.behavior.lunge_state, EnemyBehavior.LUNGE_AIRBORNE)
+	assert_eq(lunger.visor_mat, _controller._shared_visor_mat)
+
+
+func test_pack_separation_pushes_crowded_rushers_apart() -> void:
+	_controller.clear_all()
+	var left_rusher := _controller.spawn_enemy(1, null, EnemyBehavior.RUSHER)
+	var right_rusher := _controller.spawn_enemy(1, null, EnemyBehavior.RUSHER)
+	left_rusher.root.position = Vector3(-0.5, 0.9, 0.0)
+	right_rusher.root.position = Vector3(0.5, 0.9, 0.0)
+	left_rusher.prev_position = left_rusher.root.position
+	right_rusher.prev_position = right_rusher.root.position
+
+	_controller.update(0.016, Vector3(0.0, 0.9, 12.0), 1)
+	assert_lt(left_rusher.root.linear_velocity.x, -0.5)
+	assert_gt(right_rusher.root.linear_velocity.x, 0.5)
+	assert_gt(left_rusher.root.linear_velocity.z, 4.0)
+	assert_gt(right_rusher.root.linear_velocity.z, 4.0)
