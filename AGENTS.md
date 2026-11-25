@@ -33,6 +33,9 @@ iron-pit-godot/
 │   ├── core/                     # Pure RefCounted GDScript game logic (Zero Node/SceneTree imports)
 │   │   ├── arena_layout_generator.gd # Mulberry32 seeded layout (megaliths, barricades, braziers, fog spawns)
 │   │   ├── audio_settings.gd     # Volume clamping, mute toggle, linear distance attenuation, JSON persistence
+│   │   ├── enemy_animator.gd     # Procedural joint pose solver (stride, slash, windup, leap, stagger, death)
+│   │   ├── enemy_archetypes.gd   # Visual palettes, proportions, and motion profiles for all 4 enemy archetypes
+│   │   ├── enemy_behavior.gd     # Steering & pack separation for RUSHER, FLANKER, WEAVER, LUNGER
 │   │   ├── game_state.gd         # Match lifecycle (MENU, PLAYING, PAUSED, GAME_OVER), kills, score, curse
 │   │   ├── health_state.gd       # HP math, contact damage, post-hit invulnerability timer
 │   │   ├── lore_catalog.gd       # Mor'gath narrative strings, Chronicle chapters, wave whispers
@@ -41,7 +44,8 @@ iron-pit-godot/
 │   ├── scene/                    # Godot 4 3D & Jolt Physics controllers
 │   │   ├── arena_builder.gd      # Constructs foggy ruins, parapets, monoliths, braziers, lighting
 │   │   ├── audio_manager.gd      # Pooled AudioStreamPlayer rings, music ducking, distance attenuation
-│   │   ├── enemy_controller.gd   # 21-part Gothic Fiend RigidBody3D meshes, stagger & ragdoll knockdown
+│   │   ├── enemy_controller.gd   # Per-archetype pooling, shared materials, AI/animation update, ragdoll knockdown
+│   │   ├── enemy_rig_builder.gd  # Articulated 10-pivot low-poly rigs & compound hitboxes for the 4 fiend types
 │   │   ├── player_controller.gd  # CharacterBody3D movement (WASD/Sprint/Jump/Look), recoil, footsteps
 │   │   └── weapon_controller.gd  # 9-part blackened-iron viewmodel gun, recoil kick, muzzle light, raycast
 │   └── ui/
@@ -140,18 +144,17 @@ In a 60–144 FPS 3D shooter, creating `Node` instances, `StandardMaterial3D` re
 * **Seamless Infinity Fog:**
   * Maintain exponential fog in `WorldEnvironment` (`fog_enabled = true`, `fog_density = 0.054`) with `fog_light_color` and `background_color` both set to gloomy ash-grey `Color(0.24, 0.25, 0.27)` and `Camera3D.far = 49.2` so no horizon seam or arena boundary is visible from the center.
 
-### 3.9 Enemy Anatomy & Silhouette Standards (No Visible Cylinders)
+### 3.9 Enemy Archetypes, Articulated Rigs & Silhouette Standards (No Visible Cylinders)
 * **Invisible Physics Proxy:**
   * Never render a visible capsule mesh on the root `RigidBody3D`. The root capsule `CollisionShape3D` (`height = 1.8`, `radius = 0.42`) must strictly act as an invisible Jolt physics collider.
-* **Fully Articulated 21-Part Low-Poly Anatomy:**
-  * Living enemies must be constructed out of distinct, faceted, low-poly anatomical `MeshInstance3D` nodes:
-    - Forward-pitched hunched ribcage cuirass, narrower armored midsection vertebrae, and angular pelvis/hip girdle.
-    - Segmented brawny legs: angled thighs, heavy greaves (shins), and pointed iron sabatons (boots) planted at ground level.
-    - Hunched upper back mantle and sunken skull helm with asymmetrical horns (long curved left horn, shattered broken stump on right) and glowing crimson horizontal eye visor.
-    - Asymmetrical shoulders: spiked left pauldron + dented right guard.
-    - Segmented reaching arms: upper bicep, bent forearm, and sharp 4-sided iron talons/claws reaching toward the player.
+* **Four Distinct Articulated Low-Poly Fiends (`EnemyArchetypes` + `EnemyRigBuilder`):**
+  * Each AI personality has its own distinct silhouette, nearest-neighbor tinted iron palette, glowing eye visor(s), and 10-pivot articulated joint hierarchy (`Pelvis`, `Torso`, `Head`, `ShoulderL/R`, `ElbowL/R`, `HipL/R`, `KneeL/R`) animated procedurally by `EnemyAnimator`:
+    - **Iron Brute (`RUSHER`):** Broad hunched rusted-iron juggernaut, asymmetrical broken horn, spiked left pauldron, crimson horizontal visor.
+    - **Cinder Stalker (`FLANKER`):** Tall lean slate-iron hunter, twin swept horns, back blade fins, twin V-angled amber eyes, long forearm scythe blades.
+    - **Ash Wraith (`WEAVER`):** Crooked oxidized green-ash frame, 3 protruding back rods, tilted barred iron cage-helm with dual vertical sulfur-green slits, knee spurs, forked talons.
+    - **Iron Prowler (`LUNGER`):** Low coiled charred-rust beast, 3 dorsal spine spikes, wide bull horns, oversized pounce claws, wide orange-red visor flaring white-gold during windup crouch.
 * **Hitbox Propagation:**
-  * Every visible anatomical child mesh must have an associated Layer 4 (`8`) hitbox shape with `set_meta("enemy_id", id)` so raycast hit detection works accurately across the entire humanoid body.
+  * Every visible anatomical child mesh must have an associated Layer 4 (`8`) hitbox shape on `HitboxCompoundArea` with `set_meta("enemy_id", id)` so raycast hit detection matches each archetype's silhouette accurately.
 
 ### 3.10 Gothic Narrative Tone & UI Copy Standards
 * **Atmospheric Arena Terminology over Generic Arcade/Casual Jargon:**

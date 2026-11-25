@@ -7,15 +7,17 @@ class EnemyInstance:
 	var id: int
 	var root: RigidBody3D
 	var hitbox_area: Area3D
+	var rig: EnemyRigBuilder.Rig
 	var parts: Array[MeshInstance3D] = []
 	var body_parts: Array[MeshInstance3D] = []
-	var shadow_parts: Array[MeshInstance3D] = []
 	var eye_visor: MeshInstance3D
 	var body_mat: StandardMaterial3D
+	var accent_mat: StandardMaterial3D
 	var visor_mat: StandardMaterial3D
 	var horn_mat: StandardMaterial3D
 	var personality: String = EnemyBehavior.RUSHER
 	var behavior: EnemyBehavior.State = EnemyBehavior.State.new()
+	var anim_state: EnemyAnimator.State = EnemyAnimator.State.new()
 	var hp: float
 	var state: String = "ALIVE"
 	var stagger_timer: float = 0.0
@@ -37,6 +39,8 @@ class EnemyInstance:
 		root.apply_impulse(impulse, offset)
 
 
+const MAX_POOL_PER_ARCHETYPE: int = 8
+
 var enemies: Dictionary = {}
 var layout: Dictionary = {}
 var spawn_points: Array[Vector3] = []
@@ -50,25 +54,21 @@ var contact_damage: float = 15.0
 
 var on_enemy_groan: Callable
 var _iron_texture: Texture2D
-var _shared_body_mat: StandardMaterial3D
+var _archetype_materials: Dictionary = {}
 var _shared_flash_body_mat: StandardMaterial3D
 var _shared_dead_body_mat: StandardMaterial3D
-var _shared_horn_mat: StandardMaterial3D
-var _shared_visor_mat: StandardMaterial3D
 var _shared_lunge_windup_visor_mat: StandardMaterial3D
 var _shared_dead_visor_mat: StandardMaterial3D
 var _shared_phys_mat: PhysicsMaterial
 var _shared_capsule_shape: CapsuleShape3D
 var _ground_ray_query: PhysicsRayQueryParameters3D
 var _current_graphics_quality: String = "MEDIUM"
-var _enemy_pool: Array[EnemyInstance] = []
-var _box_mesh_cache: Dictionary = {}
-var _box_shape_cache: Dictionary = {}
-var _cyl_mesh_cache: Dictionary = {}
-var _cyl_shape_cache: Dictionary = {}
+var _enemy_pools: Dictionary = {}
+var _rig_builder: EnemyRigBuilder = EnemyRigBuilder.new()
 var _alive_positions_scratch: Array[Vector2] = []
 var _alive_index_scratch: Dictionary = {}
 var _behavior_result_scratch: EnemyBehavior.StepResult = EnemyBehavior.StepResult.new()
+var _pose_scratch: EnemyAnimator.Pose = EnemyAnimator.Pose.new()
 
 
 func _init(parent_scene: Node3D = null, spawn_source: Variant = null) -> void:
@@ -86,62 +86,33 @@ func _init(parent_scene: Node3D = null, spawn_source: Variant = null) -> void:
 
 
 func _init_shared_resources() -> void:
-	_shared_body_mat = StandardMaterial3D.new()
-	_shared_body_mat.resource_name = "enemySharedBodyMat"
-	_shared_body_mat.albedo_texture = _iron_texture
-	_shared_body_mat.albedo_color = Color(0.58, 0.52, 0.48)
-	_shared_body_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	_shared_body_mat.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
-	_shared_body_mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-	_shared_body_mat.roughness = 0.9
-	_shared_body_mat.metallic_specular = 0.1
+	for archetype_id in EnemyArchetypes.get_all_ids():
+		var spec := EnemyArchetypes.get_spec(archetype_id)
+		_archetype_materials[archetype_id] = {
+			"body": _make_iron_mat("enemyBodyMat_%s" % archetype_id, spec.body_color),
+			"accent": _make_iron_mat("enemyAccentMat_%s" % archetype_id, spec.accent_color),
+			"horn": _make_horn_mat("enemyHornMat_%s" % archetype_id, spec.horn_color),
+			"visor": _make_visor_mat("enemyVisorMat_%s" % archetype_id, spec.visor_color),
+		}
+		_enemy_pools[archetype_id] = []
 
-	_shared_flash_body_mat = StandardMaterial3D.new()
-	_shared_flash_body_mat.resource_name = "enemySharedFlashBodyMat"
-	_shared_flash_body_mat.albedo_texture = _iron_texture
-	_shared_flash_body_mat.albedo_color = Color(0.58, 0.52, 0.48)
-	_shared_flash_body_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	_shared_flash_body_mat.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
-	_shared_flash_body_mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-	_shared_flash_body_mat.roughness = 0.9
-	_shared_flash_body_mat.metallic_specular = 0.1
+	_shared_flash_body_mat = _make_iron_mat("enemySharedFlashBodyMat", Color(0.62, 0.56, 0.52))
 	_shared_flash_body_mat.emission_enabled = true
 	_shared_flash_body_mat.emission = Color(0.85, 0.85, 0.85)
 
-	_shared_dead_body_mat = StandardMaterial3D.new()
-	_shared_dead_body_mat.resource_name = "enemySharedDeadBodyMat"
-	_shared_dead_body_mat.albedo_texture = _iron_texture
-	_shared_dead_body_mat.albedo_color = Color(0.24, 0.22, 0.2)
-	_shared_dead_body_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	_shared_dead_body_mat.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
-	_shared_dead_body_mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-	_shared_dead_body_mat.roughness = 0.9
-	_shared_dead_body_mat.metallic_specular = 0.1
+	_shared_dead_body_mat = _make_iron_mat("enemySharedDeadBodyMat", Color(0.24, 0.22, 0.20))
 	_shared_dead_body_mat.emission_enabled = true
 	_shared_dead_body_mat.emission = Color(0.12, 0.03, 0.02)
 
-	_shared_horn_mat = StandardMaterial3D.new()
-	_shared_horn_mat.resource_name = "enemySharedHornMat"
-	_shared_horn_mat.albedo_color = Color(0.38, 0.35, 0.28)
-	_shared_horn_mat.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
-	_shared_horn_mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-	_shared_horn_mat.roughness = 0.95
-	_shared_horn_mat.metallic_specular = 0.04
+	_shared_lunge_windup_visor_mat = _make_visor_mat(
+		"enemySharedLungeWindupVisorMat",
+		EnemyBehavior.LUNGE_WINDUP_VISOR_COLOR
+	)
 
-	_shared_visor_mat = StandardMaterial3D.new()
-	_shared_visor_mat.resource_name = "enemySharedVisorMat"
-	_shared_visor_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_shared_visor_mat.albedo_color = Color(1.0, 0.18, 0.02)
-
-	_shared_lunge_windup_visor_mat = StandardMaterial3D.new()
-	_shared_lunge_windup_visor_mat.resource_name = "enemySharedLungeWindupVisorMat"
-	_shared_lunge_windup_visor_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_shared_lunge_windup_visor_mat.albedo_color = EnemyBehavior.LUNGE_WINDUP_VISOR_COLOR
-
-	_shared_dead_visor_mat = StandardMaterial3D.new()
-	_shared_dead_visor_mat.resource_name = "enemySharedDeadVisorMat"
-	_shared_dead_visor_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_shared_dead_visor_mat.albedo_color = Color(0.15, 0.15, 0.15)
+	_shared_dead_visor_mat = _make_visor_mat(
+		"enemySharedDeadVisorMat",
+		Color(0.15, 0.15, 0.15)
+	)
 
 	_shared_phys_mat = PhysicsMaterial.new()
 	_shared_phys_mat.friction = 0.45
@@ -155,6 +126,48 @@ func _init_shared_resources() -> void:
 	_ground_ray_query.collision_mask = 1
 	_ground_ray_query.collide_with_bodies = true
 	_ground_ray_query.collide_with_areas = false
+
+
+func _make_iron_mat(mat_name: String, tint: Color) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.resource_name = mat_name
+	mat.albedo_texture = _iron_texture
+	mat.albedo_color = tint
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	mat.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	mat.roughness = 0.92
+	mat.metallic_specular = 0.08
+	return mat
+
+
+func _make_horn_mat(mat_name: String, tint: Color) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.resource_name = mat_name
+	mat.albedo_color = tint
+	mat.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	mat.roughness = 0.95
+	mat.metallic_specular = 0.04
+	return mat
+
+
+func _make_visor_mat(mat_name: String, color: Color) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.resource_name = mat_name
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = color
+	return mat
+
+
+func get_archetype_materials(personality: String) -> Dictionary:
+	var key := EnemyBehavior.normalize_personality(personality)
+	return _archetype_materials[key]
+
+
+func get_archetype_visor_mat(personality: String) -> StandardMaterial3D:
+	var mats := get_archetype_materials(personality)
+	return mats["visor"]
 
 
 func set_layout(new_layout: Dictionary) -> void:
@@ -183,9 +196,11 @@ func spawn_enemy(wave_number: int = 1, player_pos: Variant = null, forced_person
 		if forced_personality != ""
 		else EnemyBehavior.pick_personality(wave_number, randf())
 	)
-	var body_mat := _shared_body_mat
-	var horn_mat := _shared_horn_mat
-	var visor_mat := _shared_visor_mat
+	var mats := get_archetype_materials(chosen_personality)
+	var body_mat: StandardMaterial3D = mats["body"]
+	var accent_mat: StandardMaterial3D = mats["accent"]
+	var horn_mat: StandardMaterial3D = mats["horn"]
+	var visor_mat: StandardMaterial3D = mats["visor"]
 	var allow_shadows := (_current_graphics_quality != "LOW")
 	var allow_limb_shadows := (_current_graphics_quality == "HIGH")
 
@@ -195,8 +210,9 @@ func spawn_enemy(wave_number: int = 1, player_pos: Variant = null, forced_person
 		var dir_z: float = player_pos.z - spawn_pt.z
 		initial_yaw = atan2(dir_x, dir_z)
 
-	while not _enemy_pool.is_empty():
-		var pooled: EnemyInstance = _enemy_pool.pop_back()
+	var pool: Array = _enemy_pools[chosen_personality]
+	while not pool.is_empty():
+		var pooled: EnemyInstance = pool.pop_back()
 		if pooled != null and is_instance_valid(pooled.root):
 			pooled.id = id
 			pooled.root.name = "enemyRoot_%d" % id
@@ -218,27 +234,21 @@ func spawn_enemy(wave_number: int = 1, player_pos: Variant = null, forced_person
 				pooled.hitbox_area.collision_layer = 8
 				pooled.hitbox_area.set_meta("enemy_id", id)
 
-			for part in pooled.parts:
-				if is_instance_valid(part):
-					part.set_meta("enemy_id", id)
-			for bp in pooled.body_parts:
-				if is_instance_valid(bp):
-					bp.material_override = body_mat
-			if is_instance_valid(pooled.eye_visor):
-				pooled.eye_visor.material_override = visor_mat
-
-			for idx in range(pooled.shadow_parts.size()):
-				var sp := pooled.shadow_parts[idx]
-				if is_instance_valid(sp):
-					var is_core_torso := (idx == 0 or idx == 3)
-					var should_cast := allow_shadows if is_core_torso else allow_limb_shadows
-					sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if should_cast else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			pooled.rig.set_enemy_id_meta(id)
+			pooled.rig.apply_body_materials(body_mat, accent_mat)
+			pooled.rig.apply_visor_material(visor_mat)
+			pooled.rig.apply_shadow_quality(allow_shadows, allow_limb_shadows)
 
 			pooled.body_mat = body_mat
+			pooled.accent_mat = accent_mat
 			pooled.visor_mat = visor_mat
 			pooled.horn_mat = horn_mat
 			pooled.personality = chosen_personality
 			pooled.behavior.reset(chosen_personality, randf(), randf(), randf())
+			pooled.anim_state.reset(chosen_personality, randf())
+			var init_pose := EnemyAnimator.step(pooled.anim_state, 0.0, 0.0, 0.0, true, false, false, false, false, _pose_scratch)
+			pooled.rig.apply_pose(init_pose)
+
 			pooled.hp = max_hp + minf(40.0, float(wave_number - 1) * 10.0)
 			pooled.state = "ALIVE"
 			pooled.stagger_timer = 0.0
@@ -287,330 +297,16 @@ func spawn_enemy(wave_number: int = 1, player_pos: Variant = null, forced_person
 	if player_pos is Vector3:
 		root.rotation = Vector3(0.0, initial_yaw, 0.0)
 
-	var parts: Array[MeshInstance3D] = []
-	var body_parts: Array[MeshInstance3D] = []
-	var shadow_parts: Array[MeshInstance3D] = []
-
-	# 2. Heavy Angular Torso (Upper Cuirass, Midsection Vertebrae, Pelvis)
-	var chest_plate := _add_box_part(
-		"enemyChest_%d" % id,
-		Vector3(0.74, 0.48, 0.54),
-		Vector3(0.0, 0.22, 0.1),
-		Vector3(0.22, 0.0, -0.03),
-		body_mat,
+	# 2. Build articulated low-poly gothic rig for this archetype
+	var rig := _rig_builder.build_rig(
+		chosen_personality,
 		root,
+		hitbox_area,
 		id,
-		allow_shadows
-	)
-	parts.append(chest_plate)
-	body_parts.append(chest_plate)
-	shadow_parts.append(chest_plate)
-
-	var mid_spine := _add_box_part(
-		"enemyMidSpine_%d" % id,
-		Vector3(0.52, 0.26, 0.38),
-		Vector3(0.0, -0.06, 0.05),
-		Vector3(0.1, 0.0, 0.0),
-		body_mat,
-		root,
-		id,
-		false
-	)
-	parts.append(mid_spine)
-	body_parts.append(mid_spine)
-
-	var pelvis := _add_box_part(
-		"enemyPelvis_%d" % id,
-		Vector3(0.62, 0.22, 0.44),
-		Vector3(0.0, -0.24, 0.02),
-		Vector3.ZERO,
-		body_mat,
-		root,
-		id,
-		false
-	)
-	parts.append(pelvis)
-	body_parts.append(pelvis)
-
-	# 3. Segmented Brawny Legs with Heavy Iron Greaves & Pointed Sabatons
-	var thigh_l := _add_box_part(
-		"enemyThighL_%d" % id,
-		Vector3(0.22, 0.38, 0.26),
-		Vector3(-0.2, -0.48, 0.04),
-		Vector3(0.12, 0.0, 0.0),
-		body_mat,
-		root,
-		id,
+		mats,
+		allow_shadows,
 		allow_limb_shadows
 	)
-	parts.append(thigh_l)
-	body_parts.append(thigh_l)
-	shadow_parts.append(thigh_l)
-
-	var shin_l := _add_box_part(
-		"enemyShinL_%d" % id,
-		Vector3(0.18, 0.42, 0.22),
-		Vector3(-0.2, -0.78, -0.02),
-		Vector3(-0.14, 0.0, 0.0),
-		body_mat,
-		root,
-		id,
-		false
-	)
-	parts.append(shin_l)
-	body_parts.append(shin_l)
-
-	var sabaton_l := _add_box_part(
-		"enemySabatonL_%d" % id,
-		Vector3(0.2, 0.14, 0.36),
-		Vector3(-0.2, -0.96, 0.08),
-		Vector3.ZERO,
-		body_mat,
-		root,
-		id,
-		false
-	)
-	parts.append(sabaton_l)
-	body_parts.append(sabaton_l)
-
-	var thigh_r := _add_box_part(
-		"enemyThighR_%d" % id,
-		Vector3(0.22, 0.38, 0.26),
-		Vector3(0.2, -0.48, -0.02),
-		Vector3(-0.08, 0.0, 0.0),
-		body_mat,
-		root,
-		id,
-		allow_limb_shadows
-	)
-	parts.append(thigh_r)
-	body_parts.append(thigh_r)
-	shadow_parts.append(thigh_r)
-
-	var shin_r := _add_box_part(
-		"enemyShinR_%d" % id,
-		Vector3(0.18, 0.42, 0.22),
-		Vector3(0.2, -0.78, 0.04),
-		Vector3(0.1, 0.0, 0.0),
-		body_mat,
-		root,
-		id,
-		false
-	)
-	parts.append(shin_r)
-	body_parts.append(shin_r)
-
-	var sabaton_r := _add_box_part(
-		"enemySabatonR_%d" % id,
-		Vector3(0.2, 0.14, 0.36),
-		Vector3(0.2, -0.96, 0.14),
-		Vector3.ZERO,
-		body_mat,
-		root,
-		id,
-		false
-	)
-	parts.append(sabaton_r)
-	body_parts.append(sabaton_r)
-
-	# 4. Hunched Upper Back Mantle & Sunken Skull Helm
-	var hunch_mantle := _add_box_part(
-		"enemyHunch_%d" % id,
-		Vector3(0.72, 0.44, 0.58),
-		Vector3(0.0, 0.46, -0.02),
-		Vector3(0.28, 0.0, 0.0),
-		body_mat,
-		root,
-		id,
-		allow_shadows
-	)
-	parts.append(hunch_mantle)
-	body_parts.append(hunch_mantle)
-	shadow_parts.append(hunch_mantle)
-
-	var skull_helm := _add_box_part(
-		"enemySkull_%d" % id,
-		Vector3(0.36, 0.38, 0.44),
-		Vector3(0.0, 0.66, 0.24),
-		Vector3(0.22, 0.0, 0.0),
-		body_mat,
-		root,
-		id,
-		false
-	)
-	parts.append(skull_helm)
-	body_parts.append(skull_helm)
-
-	# Asymmetrical Horns: Long curved left horn + broken shattered right stump
-	var horn_left := _add_cylinder_part(
-		"enemyHornL_%d" % id,
-		0.02,
-		0.11,
-		0.54,
-		5,
-		Vector3(-0.16, 0.24, 0.02),
-		Vector3(-0.45, 0.15, -0.38),
-		horn_mat,
-		skull_helm,
-		id,
-		false
-	)
-	parts.append(horn_left)
-
-	var horn_right := _add_cylinder_part(
-		"enemyHornR_%d" % id,
-		0.08,
-		0.11,
-		0.18,
-		5,
-		Vector3(0.16, 0.15, 0.02),
-		Vector3(-0.2, -0.1, 0.32),
-		horn_mat,
-		skull_helm,
-		id,
-		false
-	)
-	parts.append(horn_right)
-
-	# Glowing Demonic Eye Slits
-	var eye_visor := _add_box_part(
-		"enemyEyes_%d" % id,
-		Vector3(0.3, 0.07, 0.16),
-		Vector3(0.0, 0.01, 0.2),
-		Vector3.ZERO,
-		visor_mat,
-		skull_helm,
-		id,
-		false
-	)
-	parts.append(eye_visor)
-
-	# 5. Asymmetrical Shoulders: Spiked Left Pauldron + Dented Right Guard
-	var pauldron_left := _add_box_part(
-		"enemyPauldronL_%d" % id,
-		Vector3(0.36, 0.32, 0.42),
-		Vector3(-0.46, 0.42, 0.06),
-		Vector3(0.15, 0.05, -0.32),
-		body_mat,
-		root,
-		id,
-		allow_limb_shadows
-	)
-	parts.append(pauldron_left)
-	body_parts.append(pauldron_left)
-	shadow_parts.append(pauldron_left)
-
-	var spike_l1 := _add_cylinder_part(
-		"enemySpikeL1_%d" % id,
-		0.02,
-		0.09,
-		0.36,
-		5,
-		Vector3(-0.08, 0.2, 0.06),
-		Vector3(0.1, 0.0, -0.35),
-		horn_mat,
-		pauldron_left,
-		id,
-		false
-	)
-	parts.append(spike_l1)
-
-	var pauldron_right := _add_box_part(
-		"enemyPauldronR_%d" % id,
-		Vector3(0.3, 0.26, 0.36),
-		Vector3(0.44, 0.38, 0.04),
-		Vector3(0.1, -0.05, 0.24),
-		body_mat,
-		root,
-		id,
-		allow_limb_shadows
-	)
-	parts.append(pauldron_right)
-	body_parts.append(pauldron_right)
-	shadow_parts.append(pauldron_right)
-
-	# 6. Reaching Segmented Arms (Upper Arm + Forearm + Claws)
-	var bicep_l := _add_box_part(
-		"enemyBicepL_%d" % id,
-		Vector3(0.18, 0.32, 0.2),
-		Vector3(-0.45, 0.26, 0.08),
-		Vector3(0.24, 0.0, -0.18),
-		body_mat,
-		root,
-		id,
-		false
-	)
-	parts.append(bicep_l)
-	body_parts.append(bicep_l)
-
-	var forearm_l := _add_box_part(
-		"enemyForearmL_%d" % id,
-		Vector3(0.19, 0.18, 0.44),
-		Vector3(-0.48, 0.08, 0.3),
-		Vector3(-0.42, 0.14, -0.05),
-		body_mat,
-		root,
-		id,
-		false
-	)
-	parts.append(forearm_l)
-	body_parts.append(forearm_l)
-
-	var claws_l := _add_cylinder_part(
-		"enemyClawsL_%d" % id,
-		0.01,
-		0.08,
-		0.22,
-		4,
-		Vector3(0.0, 0.0, 0.26),
-		Vector3(PI / 2.0, 0.0, 0.0),
-		horn_mat,
-		forearm_l,
-		id,
-		false
-	)
-	parts.append(claws_l)
-
-	var bicep_r := _add_box_part(
-		"enemyBicepR_%d" % id,
-		Vector3(0.18, 0.32, 0.2),
-		Vector3(0.44, 0.24, 0.06),
-		Vector3(0.18, 0.0, 0.16),
-		body_mat,
-		root,
-		id,
-		false
-	)
-	parts.append(bicep_r)
-	body_parts.append(bicep_r)
-
-	var forearm_r := _add_box_part(
-		"enemyForearmR_%d" % id,
-		Vector3(0.19, 0.18, 0.44),
-		Vector3(0.46, 0.06, 0.26),
-		Vector3(-0.35, -0.12, 0.05),
-		body_mat,
-		root,
-		id,
-		false
-	)
-	parts.append(forearm_r)
-	body_parts.append(forearm_r)
-
-	var claws_r := _add_cylinder_part(
-		"enemyClawsR_%d" % id,
-		0.01,
-		0.08,
-		0.22,
-		4,
-		Vector3(0.0, 0.0, 0.26),
-		Vector3(PI / 2.0, 0.0, 0.0),
-		horn_mat,
-		forearm_r,
-		id,
-		false
-	)
-	parts.append(claws_r)
 
 	add_child(root)
 
@@ -618,15 +314,20 @@ func spawn_enemy(wave_number: int = 1, player_pos: Variant = null, forced_person
 	instance.id = id
 	instance.root = root
 	instance.hitbox_area = hitbox_area
-	instance.parts = parts
-	instance.body_parts = body_parts
-	instance.shadow_parts = shadow_parts
-	instance.eye_visor = eye_visor
+	instance.rig = rig
+	instance.parts = rig.parts
+	instance.body_parts = rig.body_parts
+	instance.eye_visor = rig.eye_visor
 	instance.body_mat = body_mat
+	instance.accent_mat = accent_mat
 	instance.visor_mat = visor_mat
 	instance.horn_mat = horn_mat
 	instance.personality = chosen_personality
 	instance.behavior.reset(chosen_personality, randf(), randf(), randf())
+	instance.anim_state.reset(chosen_personality, randf())
+	var initial_pose := EnemyAnimator.step(instance.anim_state, 0.0, 0.0, 0.0, true, false, false, false, false, _pose_scratch)
+	rig.apply_pose(initial_pose)
+
 	instance.hp = max_hp + minf(40.0, float(wave_number - 1) * 10.0)
 	instance.state = "ALIVE"
 	instance.stagger_timer = 0.0
@@ -640,121 +341,6 @@ func spawn_enemy(wave_number: int = 1, player_pos: Variant = null, forced_person
 
 	enemies[id] = instance
 	return instance
-
-
-func _get_box_mesh(size: Vector3) -> BoxMesh:
-	var key := "%.3f_%.3f_%.3f" % [size.x, size.y, size.z]
-	if not _box_mesh_cache.has(key):
-		var box := BoxMesh.new()
-		box.size = size
-		_box_mesh_cache[key] = box
-	return _box_mesh_cache[key]
-
-
-func _get_box_shape(size: Vector3) -> BoxShape3D:
-	var key := "%.3f_%.3f_%.3f" % [size.x, size.y, size.z]
-	if not _box_shape_cache.has(key):
-		var shape := BoxShape3D.new()
-		shape.size = size
-		_box_shape_cache[key] = shape
-	return _box_shape_cache[key]
-
-
-func _get_cyl_mesh(d_top: float, d_bot: float, h: float, segs: int) -> CylinderMesh:
-	var key := "%.3f_%.3f_%.3f_%d" % [d_top, d_bot, h, segs]
-	if not _cyl_mesh_cache.has(key):
-		var cyl := CylinderMesh.new()
-		cyl.top_radius = d_top / 2.0
-		cyl.bottom_radius = d_bot / 2.0
-		cyl.height = h
-		cyl.radial_segments = maxi(4, segs)
-		cyl.rings = 1
-		_cyl_mesh_cache[key] = cyl
-	return _cyl_mesh_cache[key]
-
-
-func _get_cyl_shape(d_top: float, d_bot: float, h: float) -> CylinderShape3D:
-	var key := "%.3f_%.3f_%.3f" % [d_top, d_bot, h]
-	if not _cyl_shape_cache.has(key):
-		var shape := CylinderShape3D.new()
-		shape.height = h
-		shape.radius = maxf(d_top, d_bot) / 2.0
-		_cyl_shape_cache[key] = shape
-	return _cyl_shape_cache[key]
-
-
-func _compute_transform_relative_to_root(node: Node3D, root_node: Node3D) -> Transform3D:
-	var xform := node.transform
-	var p := node.get_parent()
-	while p is Node3D and p != root_node:
-		xform = (p as Node3D).transform * xform
-		p = p.get_parent()
-	return xform
-
-
-func _add_box_part(
-	part_name: String,
-	size: Vector3,
-	pos: Vector3,
-	rot: Vector3,
-	mat: Material,
-	parent: Node3D,
-	enemy_id: int,
-	cast_shadow: bool
-) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.name = part_name
-	mi.mesh = _get_box_mesh(size)
-	mi.material_override = mat
-	mi.position = pos
-	mi.rotation = rot
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if cast_shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mi.set_meta("enemy_id", enemy_id)
-	parent.add_child(mi)
-
-	var root_node := parent if parent is RigidBody3D else parent.get_parent() as Node3D
-	var hit_area := root_node.get_node_or_null("HitboxCompoundArea") as Area3D
-	if hit_area != null:
-		var col := CollisionShape3D.new()
-		col.shape = _get_box_shape(size)
-		col.transform = _compute_transform_relative_to_root(mi, root_node)
-		hit_area.add_child(col)
-
-	return mi
-
-
-func _add_cylinder_part(
-	part_name: String,
-	d_top: float,
-	d_bot: float,
-	h: float,
-	segs: int,
-	pos: Vector3,
-	rot: Vector3,
-	mat: Material,
-	parent: Node3D,
-	enemy_id: int,
-	cast_shadow: bool
-) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.name = part_name
-	mi.mesh = _get_cyl_mesh(d_top, d_bot, h, segs)
-	mi.material_override = mat
-	mi.position = pos
-	mi.rotation = rot
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if cast_shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mi.set_meta("enemy_id", enemy_id)
-	parent.add_child(mi)
-
-	var root_node := parent if parent is RigidBody3D else parent.get_parent() as Node3D
-	var hit_area := root_node.get_node_or_null("HitboxCompoundArea") as Area3D
-	if hit_area != null:
-		var col := CollisionShape3D.new()
-		col.shape = _get_cyl_shape(d_top, d_bot, h)
-		col.transform = _compute_transform_relative_to_root(mi, root_node)
-		hit_area.add_child(col)
-
-	return mi
 
 
 func apply_hit(
@@ -776,19 +362,18 @@ func apply_hit(
 	else:
 		flat_dir = Vector3(0.0, 0.0, 1.0)
 
+	var archetype_visor := get_archetype_visor_mat(enemy.personality)
+
 	if enemy.hp > 0.0:
 		enemy.stagger_timer = 0.26
 		enemy.stuck_timer = 0.0
 		enemy.flash_timer = 0.11
 		enemy.behavior.on_stagger()
 		enemy.body_mat = _shared_flash_body_mat
-		for bp in enemy.body_parts:
-			if is_instance_valid(bp):
-				bp.material_override = _shared_flash_body_mat
-		if enemy.visor_mat != _shared_visor_mat:
-			enemy.visor_mat = _shared_visor_mat
-			if is_instance_valid(enemy.eye_visor):
-				enemy.eye_visor.material_override = _shared_visor_mat
+		enemy.rig.apply_body_materials(_shared_flash_body_mat, _shared_flash_body_mat)
+		if enemy.visor_mat != archetype_visor:
+			enemy.visor_mat = archetype_visor
+			enemy.rig.apply_visor_material(archetype_visor)
 
 		var stagger_impulse := Vector3(
 			flat_dir.x * 11.5,
@@ -806,14 +391,9 @@ func apply_hit(
 	enemy.flash_timer = 0.0
 	enemy.body_mat = _shared_dead_body_mat
 	enemy.visor_mat = _shared_dead_visor_mat
-	for bp in enemy.body_parts:
-		if is_instance_valid(bp):
-			bp.material_override = _shared_dead_body_mat
-	if is_instance_valid(enemy.eye_visor):
-		enemy.eye_visor.material_override = _shared_dead_visor_mat
-	for part in enemy.parts:
-		if is_instance_valid(part):
-			part.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	enemy.rig.apply_body_materials(_shared_dead_body_mat, _shared_dead_body_mat)
+	enemy.rig.apply_visor_material(_shared_dead_visor_mat)
+	enemy.rig.disable_all_shadows()
 	if is_instance_valid(enemy.hitbox_area):
 		enemy.hitbox_area.collision_layer = 0
 
@@ -867,12 +447,25 @@ func update(dt: float, player_position: Vector3, wave_number: int = 1) -> float:
 		if enemy.flash_timer > 0.0:
 			enemy.flash_timer -= dt
 			if enemy.flash_timer <= 0.0 and enemy.state == "ALIVE":
-				enemy.body_mat = _shared_body_mat
-				for bp in enemy.body_parts:
-					if is_instance_valid(bp):
-						bp.material_override = _shared_body_mat
+				var mats := get_archetype_materials(enemy.personality)
+				enemy.body_mat = mats["body"]
+				enemy.accent_mat = mats["accent"]
+				enemy.rig.apply_body_materials(enemy.body_mat, enemy.accent_mat)
 
 		if enemy.state == "KNOCKED_DOWN":
+			var death_pose := EnemyAnimator.step(
+				enemy.anim_state,
+				dt,
+				0.0,
+				0.0,
+				false,
+				false,
+				false,
+				true,
+				false,
+				_pose_scratch
+			)
+			enemy.rig.apply_pose(death_pose)
 			enemy.despawn_timer -= dt
 			if enemy.despawn_timer <= 0.0:
 				_dispose_enemy(id, enemy)
@@ -889,6 +482,19 @@ func update(dt: float, player_position: Vector3, wave_number: int = 1) -> float:
 
 		if enemy.stagger_timer > 0.0:
 			enemy.stagger_timer -= dt
+			var stagger_pose := EnemyAnimator.step(
+				enemy.anim_state,
+				dt,
+				0.0,
+				0.0,
+				true,
+				false,
+				true,
+				false,
+				false,
+				_pose_scratch
+			)
+			enemy.rig.apply_pose(stagger_pose)
 			continue
 
 		if enemy.jump_cooldown > 0.0:
@@ -909,9 +515,12 @@ func update(dt: float, player_position: Vector3, wave_number: int = 1) -> float:
 		if horizontal_dist > 0.0001:
 			move_dir = horizontal_vec / horizontal_dist
 
+		var current_vel := enemy.root.linear_velocity
+		var is_grounded := _is_enemy_grounded(enemy, pos, current_vel)
+		var is_winding_up := false
+		var archetype_visor := get_archetype_visor_mat(enemy.personality)
+
 		if horizontal_dist > 0.9:
-			var current_vel := enemy.root.linear_velocity
-			var is_grounded := _is_enemy_grounded(enemy, pos, current_vel)
 			var alive_idx := int(_alive_index_scratch.get(id, -1))
 			var separation_xz := (
 				EnemyBehavior.compute_separation(Vector2(pos.x, pos.z), _alive_positions_scratch, alive_idx)
@@ -928,15 +537,15 @@ func update(dt: float, player_position: Vector3, wave_number: int = 1) -> float:
 				separation_xz,
 				_behavior_result_scratch
 			)
+			is_winding_up = bres.is_winding_up
 
 			if bres.started_windup and on_enemy_groan.is_valid():
 				on_enemy_groan.call(pos)
 
-			var target_visor := _shared_lunge_windup_visor_mat if bres.is_winding_up else _shared_visor_mat
+			var target_visor := _shared_lunge_windup_visor_mat if bres.is_winding_up else archetype_visor
 			if enemy.visor_mat != target_visor:
 				enemy.visor_mat = target_visor
-				if is_instance_valid(enemy.eye_visor):
-					enemy.eye_visor.material_override = target_visor
+				enemy.rig.apply_visor_material(target_visor)
 
 			if bres.suppress_stuck_timer:
 				enemy.stuck_timer = 0.0
@@ -1000,15 +609,38 @@ func update(dt: float, player_position: Vector3, wave_number: int = 1) -> float:
 			if absf(angle_difference(enemy.current_yaw, target_yaw)) > 0.025:
 				enemy.current_yaw = target_yaw
 				enemy.root.rotation = Vector3(0.0, target_yaw, 0.0)
+
+			if did_jump or bres.preserve_airborne_velocity:
+				is_grounded = false
 		else:
 			enemy.stuck_timer = 0.0
 			if enemy.behavior.lunge_state == EnemyBehavior.LUNGE_WINDUP:
 				enemy.behavior.lunge_state = EnemyBehavior.LUNGE_CHASE
 				enemy.behavior.lunge_timer = 0.0
-			if enemy.visor_mat != _shared_visor_mat:
-				enemy.visor_mat = _shared_visor_mat
-				if is_instance_valid(enemy.eye_visor):
-					enemy.eye_visor.material_override = _shared_visor_mat
+			if enemy.visor_mat != archetype_visor:
+				enemy.visor_mat = archetype_visor
+				enemy.rig.apply_visor_material(archetype_visor)
+
+		# Update procedural limb animation
+		var vel_after := enemy.root.linear_velocity
+		var horiz_speed := Vector2(vel_after.x, vel_after.z).length()
+		var right_x := cos(enemy.current_yaw)
+		var right_z := -sin(enemy.current_yaw)
+		var lateral_speed := vel_after.x * right_x + vel_after.z * right_z
+		var in_slash_range := (horizontal_dist <= contact_distance + 0.55 and absf(vertical_diff) <= 1.5)
+		var pose := EnemyAnimator.step(
+			enemy.anim_state,
+			dt,
+			horiz_speed,
+			lateral_speed,
+			is_grounded,
+			is_winding_up,
+			false,
+			false,
+			in_slash_range,
+			_pose_scratch
+		)
+		enemy.rig.apply_pose(pose)
 
 		# Clamp within arena bounds (±49.2m)
 		if absf(pos.x) > 49.2 or absf(pos.z) > 49.2:
@@ -1045,39 +677,48 @@ func apply_graphics_quality(quality: String) -> void:
 	var allow_limb_shadows := (_current_graphics_quality == "HIGH")
 	for id in enemies.keys():
 		var enemy: EnemyInstance = enemies[id]
-		if enemy == null or enemy.state != "ALIVE":
+		if enemy == null or enemy.state != "ALIVE" or enemy.rig == null:
 			continue
-		for idx in range(enemy.shadow_parts.size()):
-			var sp := enemy.shadow_parts[idx]
-			if not is_instance_valid(sp):
-				continue
-			var is_core_torso := (idx == 0 or idx == 3)
-			var should_cast := allow_shadows if is_core_torso else allow_limb_shadows
-			sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if should_cast else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		enemy.rig.apply_shadow_quality(allow_shadows, allow_limb_shadows)
 
 
 func get_pooled_count() -> int:
-	return _enemy_pool.size()
+	var total := 0
+	for pool_val in _enemy_pools.values():
+		var pool := pool_val as Array
+		total += pool.size()
+	return total
+
+
+func get_pooled_count_for(personality: String) -> int:
+	var key := EnemyBehavior.normalize_personality(personality)
+	if not _enemy_pools.has(key):
+		return 0
+	return (_enemy_pools[key] as Array).size()
 
 
 func _dispose_enemy(id: int, enemy: EnemyInstance, pool_for_reuse: bool = true) -> void:
 	if is_instance_valid(enemy.root):
 		if enemy.root.get_parent() != null:
 			enemy.root.get_parent().remove_child(enemy.root)
-		if pool_for_reuse and _enemy_pool.size() < 24:
-			_enemy_pool.append(enemy)
+		var key := EnemyBehavior.normalize_personality(enemy.personality)
+		var pool: Array = _enemy_pools[key]
+		if pool_for_reuse and pool.size() < MAX_POOL_PER_ARCHETYPE:
+			pool.append(enemy)
 		else:
 			enemy.root.free()
 	enemies.erase(id)
 
 
 func _free_pool() -> void:
-	for pooled in _enemy_pool:
-		if pooled != null and is_instance_valid(pooled.root):
-			if pooled.root.get_parent() != null:
-				pooled.root.get_parent().remove_child(pooled.root)
-			pooled.root.free()
-	_enemy_pool.clear()
+	for pool_val in _enemy_pools.values():
+		var pool := pool_val as Array
+		for pooled in pool:
+			if pooled != null and is_instance_valid(pooled.root):
+				if pooled.root.get_parent() != null:
+					pooled.root.get_parent().remove_child(pooled.root)
+				pooled.root.free()
+		pool.clear()
 
 
 func _exit_tree() -> void:

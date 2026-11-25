@@ -10,7 +10,7 @@ func before_each() -> void:
 	scene_tree.root.add_child(_root)
 	var spawn_point := Vector3(0.0, 0.9, 0.0)
 	_controller = EnemyController.new(_root, [spawn_point])
-	_enemy = _controller.spawn_enemy(1)
+	_enemy = _controller.spawn_enemy(1, null, EnemyBehavior.RUSHER)
 	await scene_tree.physics_frame
 
 
@@ -104,8 +104,38 @@ func test_spawns_enemies_in_distance_fog_away_from_player_with_layout() -> void:
 	assert_lte(absf(fog_enemy.root.position.z), bounds)
 
 
-func test_builds_23_part_anatomy_and_handles_stagger_and_fatal_knockdown() -> void:
-	assert_eq(_enemy.parts.size(), 23)
+func test_builds_distinct_articulated_rigs_for_all_four_archetypes() -> void:
+	var rusher := _enemy
+	var flanker := _controller.spawn_enemy(1, null, EnemyBehavior.FLANKER)
+	var weaver := _controller.spawn_enemy(2, null, EnemyBehavior.WEAVER)
+	var lunger := _controller.spawn_enemy(3, null, EnemyBehavior.LUNGER)
+
+	# All archetypes have full articulated low-poly rigs (>=21 parts) and compound hitboxes
+	for inst in [rusher, flanker, weaver, lunger]:
+		assert_gte(inst.parts.size(), 21)
+		assert_true(is_instance_valid(inst.rig.torso_pivot))
+		assert_true(is_instance_valid(inst.rig.head_pivot))
+		assert_true(is_instance_valid(inst.rig.hip_l_pivot))
+		assert_true(is_instance_valid(inst.rig.shoulder_l_pivot))
+		assert_eq(inst.hitbox_area.get_child_count(), inst.parts.size())
+		assert_eq(inst.body_mat.texture_filter, BaseMaterial3D.TEXTURE_FILTER_NEAREST)
+
+	# Distinct visual identities: different body & visor materials, plus archetype-specific anatomy
+	assert_ne(rusher.body_mat, flanker.body_mat)
+	assert_ne(flanker.body_mat, weaver.body_mat)
+	assert_ne(weaver.body_mat, lunger.body_mat)
+	assert_ne(rusher.visor_mat, flanker.visor_mat)
+	assert_ne(flanker.visor_mat, weaver.visor_mat)
+	assert_ne(weaver.visor_mat, lunger.visor_mat)
+	# Flanker & Weaver have dual glowing eyes/slits; Rusher & Lunger have single visor bar
+	assert_eq(flanker.rig.visor_parts.size(), 2)
+	assert_eq(weaver.rig.visor_parts.size(), 2)
+	assert_eq(rusher.rig.visor_parts.size(), 1)
+	assert_eq(lunger.rig.visor_parts.size(), 1)
+
+
+func test_handles_stagger_and_fatal_knockdown_with_rig_animations() -> void:
+	assert_gte(_enemy.parts.size(), 21)
 
 	# Non-lethal hit (35 damage -> 65 HP remaining)
 	var outcome1 := _controller.apply_hit(_enemy.id, 35.0, Vector3(0.0, 1.2, 0.0), Vector3(0.0, 0.0, 1.0))
@@ -114,6 +144,12 @@ func test_builds_23_part_anatomy_and_handles_stagger_and_fatal_knockdown() -> vo
 	assert_near(_enemy.hp, 65.0)
 	assert_gt(_enemy.stagger_timer, 0.2)
 	assert_true(_enemy.root.axis_lock_angular_x)
+
+	# Updating during stagger drives backward torso recoil on the rig
+	for _i in range(6):
+		_controller.update(0.03, Vector3(0.0, 0.9, 10.0), 1)
+	assert_eq(_enemy.anim_state.active_clip, EnemyAnimator.CLIP_STAGGER)
+	assert_lt(_enemy.rig.torso_pivot.rotation.x, -0.2)
 
 	# Fatal hit (70 damage -> <= 0 HP)
 	var outcome2 := _controller.apply_hit(_enemy.id, 70.0, Vector3(0.0, 1.5, 0.0), Vector3(0.0, 0.0, 1.0))
@@ -126,46 +162,72 @@ func test_builds_23_part_anatomy_and_handles_stagger_and_fatal_knockdown() -> vo
 	assert_gt(_enemy.last_applied_impulse.y, 6.0)
 	assert_eq(_enemy.hitbox_area.collision_layer, 0)
 
+	# Updating while knocked down drives splayed death pose
+	for _i in range(6):
+		_controller.update(0.03, Vector3(0.0, 0.9, 10.0), 1)
+	assert_eq(_enemy.anim_state.active_clip, EnemyAnimator.CLIP_KNOCKED_DOWN)
+	assert_lt(_enemy.rig.shoulder_l_pivot.rotation.z, -0.7)
 
-func test_shares_materials_and_physics_resources_across_spawned_enemies() -> void:
-	var second_enemy := _controller.spawn_enemy(1)
-	assert_eq(_enemy.body_mat, second_enemy.body_mat)
-	assert_eq(_enemy.horn_mat, second_enemy.horn_mat)
-	assert_eq(_enemy.visor_mat, second_enemy.visor_mat)
-	assert_eq(_enemy.root.physics_material_override, second_enemy.root.physics_material_override)
 
-	var flanker := _controller.spawn_enemy(1, null, EnemyBehavior.FLANKER)
-	var lunger := _controller.spawn_enemy(3, null, EnemyBehavior.LUNGER)
-	assert_eq(flanker.body_mat, lunger.body_mat)
-	assert_eq(flanker.visor_mat, lunger.visor_mat)
+func test_animates_chase_stride_and_close_slash_on_joint_pivots() -> void:
+	_enemy.root.position = Vector3(0.0, 0.9, 0.0)
+	_enemy.prev_position = _enemy.root.position
+	_enemy.anim_state.stride_phase = 0.0
+	var initial_hip_x := _enemy.rig.hip_l_pivot.rotation.x
 
-	# Hit first enemy -> switches to shared flash material without mutating second enemy's material
+	# Chasing player at 12m advances stride phase and swings hip joints
+	_controller.update(0.12, Vector3(0.0, 0.9, 12.0), 1)
+	assert_eq(_enemy.anim_state.active_clip, EnemyAnimator.CLIP_CHASE)
+	assert_gt(absf(_enemy.rig.hip_l_pivot.rotation.x - initial_hip_x), 0.1)
+
+	# Close range triggers claw slash clip
+	_enemy.root.position = Vector3(0.0, 0.9, 10.8)
+	_enemy.prev_position = _enemy.root.position
+	_controller.update(0.016, Vector3(0.0, 0.9, 12.0), 1)
+	assert_eq(_enemy.anim_state.active_clip, EnemyAnimator.CLIP_SLASH)
+
+
+func test_shares_materials_per_archetype_and_flashes_without_mutating_peers() -> void:
+	var second_rusher := _controller.spawn_enemy(1, null, EnemyBehavior.RUSHER)
+	assert_eq(_enemy.body_mat, second_rusher.body_mat)
+	assert_eq(_enemy.accent_mat, second_rusher.accent_mat)
+	assert_eq(_enemy.horn_mat, second_rusher.horn_mat)
+	assert_eq(_enemy.visor_mat, second_rusher.visor_mat)
+	assert_eq(_enemy.root.physics_material_override, second_rusher.root.physics_material_override)
+
+	# Hit first rusher -> switches to shared flash material without mutating second rusher's material
 	_controller.apply_hit(_enemy.id, 35.0, Vector3(0.0, 1.2, 0.0), Vector3(0.0, 0.0, 1.0))
-	assert_ne(_enemy.body_mat, second_enemy.body_mat)
+	assert_ne(_enemy.body_mat, second_rusher.body_mat)
 	assert_true(_enemy.body_mat.emission_enabled)
-	assert_false(second_enemy.body_mat.emission_enabled)
+	assert_false(second_rusher.body_mat.emission_enabled)
 
-	# After flash timer expires, first enemy returns to shared alive body material
+	# After flash timer expires, first rusher returns to shared rusher alive material
 	_controller.update(0.15, Vector3(0.0, 0.9, 10.0), 1)
-	assert_eq(_enemy.body_mat, second_enemy.body_mat)
+	assert_eq(_enemy.body_mat, second_rusher.body_mat)
 
 
-func test_pools_despawned_enemy_node_hierarchies_for_zero_allocation_reuse() -> void:
-	var original_root := _enemy.root
-	# Kill and despawn _enemy
-	_controller.apply_hit(_enemy.id, 150.0, Vector3(0.0, 1.5, 0.0), Vector3(0.0, 0.0, 1.0))
-	assert_eq(_enemy.state, "KNOCKED_DOWN")
-	_controller.update(3.0, Vector3(0.0, 0.9, 10.0), 1)
-	assert_eq(_controller.enemies.size(), 0)
-	assert_eq(_controller.get_pooled_count(), 1)
+func test_pools_despawned_enemy_hierarchies_per_archetype_for_reuse() -> void:
+	var lunger := _controller.spawn_enemy(3, Vector3(0.0, 0.9, 10.0), EnemyBehavior.LUNGER)
+	var original_root := lunger.root
+	# Kill and despawn lunger
+	_controller.apply_hit(lunger.id, 150.0, Vector3(0.0, 1.5, 0.0), Vector3(0.0, 0.0, 1.0))
+	assert_eq(lunger.state, "KNOCKED_DOWN")
+	_controller.update(3.0, Vector3(0.0, 0.9, 10.0), 3)
+	assert_eq(_controller.get_pooled_count_for(EnemyBehavior.LUNGER), 1)
 
-	# Next spawn reuses the pooled RigidBody3D hierarchy with restored state, personality, and hitboxes
+	# Spawning a different archetype does not hijack the pooled Lunger rig
+	var weaver := _controller.spawn_enemy(2, Vector3(0.0, 0.9, 10.0), EnemyBehavior.WEAVER)
+	assert_ne(weaver.root, original_root)
+	assert_eq(_controller.get_pooled_count_for(EnemyBehavior.LUNGER), 1)
+
+	# Spawning a Lunger reuses the pooled Lunger RigidBody3D hierarchy with restored state & anim pose
 	var reused := _controller.spawn_enemy(3, Vector3(0.0, 0.9, 10.0), EnemyBehavior.LUNGER)
-	assert_eq(_controller.get_pooled_count(), 0)
+	assert_eq(_controller.get_pooled_count_for(EnemyBehavior.LUNGER), 0)
 	assert_eq(reused.root, original_root)
 	assert_eq(reused.state, "ALIVE")
 	assert_eq(reused.personality, EnemyBehavior.LUNGER)
 	assert_eq(reused.behavior.personality, EnemyBehavior.LUNGER)
+	assert_eq(reused.anim_state.active_clip, EnemyAnimator.CLIP_IDLE)
 	assert_eq(reused.eye_visor.material_override, reused.visor_mat)
 	assert_eq(reused.hitbox_area.collision_layer, 8)
 	assert_true(reused.root.axis_lock_angular_x)
@@ -200,31 +262,37 @@ func test_flanker_and_weaver_steer_laterally_in_controller() -> void:
 	assert_gt(vx_second, 1.0)
 
 
-func test_lunger_telegraphs_with_visor_flash_and_launches_impulse() -> void:
+func test_lunger_telegraphs_with_visor_flash_crouch_and_launches_impulse() -> void:
 	_controller.clear_all()
 	var groans := {"count": 0}
 	_controller.on_enemy_groan = func(_pos: Vector3) -> void:
 		groans["count"] = int(groans["count"]) + 1
 
 	var lunger := _controller.spawn_enemy(3, null, EnemyBehavior.LUNGER)
+	var lunger_visor := _controller.get_archetype_visor_mat(EnemyBehavior.LUNGER)
 	lunger.root.position = Vector3(0.0, 0.9, 0.0)
 	lunger.prev_position = lunger.root.position
 	lunger.root.linear_velocity = Vector3.ZERO
 	lunger.behavior.lunge_cooldown = 0.0
 	lunger.groan_timer = 10.0
 
-	# Enters windup at 7m: stops moving, flares visor white-gold, emits groan cue
+	# Enters windup at 7m: stops moving, flares visor white-gold, crouches rig, emits groan cue
 	_controller.update(0.016, Vector3(0.0, 0.9, 7.0), 3)
 	assert_eq(lunger.behavior.lunge_state, EnemyBehavior.LUNGE_WINDUP)
 	assert_eq(lunger.visor_mat.albedo_color, EnemyBehavior.LUNGE_WINDUP_VISOR_COLOR)
+	assert_eq(lunger.anim_state.active_clip, EnemyAnimator.CLIP_WINDUP)
 	assert_near(lunger.root.linear_velocity.x, 0.0)
 	assert_near(lunger.root.linear_velocity.z, 0.0)
 	assert_eq(int(groans["count"]), 1)
 
-	# Shooting during windup interrupts lunge and restores crimson visor
+	# Advance slightly during windup -> rig visibly crouches downward
+	_controller.update(0.12, Vector3(0.0, 0.9, 7.0), 3)
+	assert_lt(lunger.rig.visual_rig.position.y, -0.1)
+
+	# Shooting during windup interrupts lunge and restores archetype visor
 	_controller.apply_hit(lunger.id, 35.0, Vector3(0.0, 1.2, 0.0), Vector3(0.0, 0.0, -1.0))
 	assert_eq(lunger.behavior.lunge_state, EnemyBehavior.LUNGE_CHASE)
-	assert_eq(lunger.visor_mat, _controller._shared_visor_mat)
+	assert_eq(lunger.visor_mat, lunger_visor)
 
 	# Re-arm and complete full windup -> fires forward+upward Jolt impulse
 	lunger.stagger_timer = 0.0
@@ -237,7 +305,7 @@ func test_lunger_telegraphs_with_visor_flash_and_launches_impulse() -> void:
 	assert_gt(lunger.last_applied_impulse.z, 15.0)
 	assert_gt(lunger.last_applied_impulse.y, 6.0)
 	assert_eq(lunger.behavior.lunge_state, EnemyBehavior.LUNGE_AIRBORNE)
-	assert_eq(lunger.visor_mat, _controller._shared_visor_mat)
+	assert_eq(lunger.visor_mat, lunger_visor)
 
 
 func test_pack_separation_pushes_crowded_rushers_apart() -> void:

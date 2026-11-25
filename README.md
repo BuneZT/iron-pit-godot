@@ -9,7 +9,7 @@ A dark, atmospheric wave-based 3D arena survival First-Person Shooter inspired b
 - **Gothic Retro Atmosphere**: Open-air desolate ruins shrouded in thick ash-grey fog, weathered stone pillars, crumbling parapets, and flickering iron fire-braziers.
 - **90s Low-Poly Aesthetic**: Crunchy point-sampled pixel textures with Bayer dithering and gothic low-poly architecture.
 - **Kinetic Physics Combat**: Heavy blunderbuss/nailgun gunplay with physical hit stagger and ragdoll knockdowns.
-- **Escalating Wave Survival**: Fight through relentless waves of Gothic Fiends with increasing speed and durability, lore whispers between waves, and the **Wave 10 Curse Broken** milestone.
+- **Escalating Wave Survival**: Fight through relentless waves of four distinct Gothic Fiend archetypes—see the [Bestiary (`docs/bestiary.md`)](docs/bestiary.md) for visuals, names, and behaviors—with lore whispers between waves and the **Wave 10 Curse Broken** milestone.
 - **90s Beveled Iron HUD**: Classic retro interface with an interactive Chronicle grimoire and built-in audio mixer.
 
 ---
